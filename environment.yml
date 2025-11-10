@@ -5,3 +5,7 @@ dependencies:
   - python=3.11
   - cadet
   - pip
+  - paho-mqtt
+  - spyder-kernels=3.0
+  - h5py
+  - CADET-Process
