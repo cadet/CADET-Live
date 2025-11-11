@@ -21,3 +21,7 @@ This section in the README.md contains an installation guide for the contents of
 ## Getting Started
 
 This section in the README.md describes how users can begin working with the contents of this repository.
+
+---
+### Overview
+![Concept](image/README/CADET-LivePioreactor.drawio.png)
