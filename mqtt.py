@@ -11,9 +11,9 @@ import paho.mqtt.client as mqtt
 from datetime import datetime
 
 class Client:
-    username = "pioreactor"
-    password = "raspberry"
-    host = "pioreactor.local"
+    username = "def_user"
+    password = "def_pass"
+    host = "deff_host"
     port = 1883
     timeout = 60
 

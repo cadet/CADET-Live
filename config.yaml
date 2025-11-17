@@ -1,0 +1,12 @@
+source:
+  mqtt:
+    - hostname: "pioreactor01"
+      port: 1883
+      username: "pioreactor"
+      password: "raspebrry"
+      timeout: 60
+    - hostname: "pioreactor02"
+      port: 13
+      username: "pioreactor"
+      password: "raspebrry"
+      timeout: 60
