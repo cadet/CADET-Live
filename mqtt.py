@@ -5,7 +5,7 @@ Created on Thu Sep 25 13:57:57 2025
 
 @author: jannisbergmann
 """
-import asyncio
+#import asyncio
 
 import paho.mqtt.client as mqtt
 from datetime import datetime
@@ -43,8 +43,8 @@ def on_log(client, userdata, paho_log_level, messages):
 def on_message(client, userdata, message):
     # userdata is the structure we choose to provide, here it's a list()
 #    print(client, ": ", message.payload)
-    userdata.append(message.payload)
-    
+#    userdata.append(message.payload)
+#    userdata = []
     # Get LED intensity
     if(message.topic.endswith("/leds/intensity")):
         payload = eval(message.payload.decode())
@@ -53,7 +53,14 @@ def on_message(client, userdata, message):
         print("LED B: " + str(payload.get("B")))
         print("LED C: " + str(payload.get("C")))
         print("LED D: " + str(payload.get("D")))
-        
+#        print(client)
+
+        userdata["A"] = payload.get("A")
+        userdata["B"] = payload.get("B")
+        userdata["C"] = payload.get("C")
+        userdata["D"] = payload.get("D")
+
+    
     # We only want to process 10 messages
     if len(userdata) >= 50:
         client.unsubscribe("pioreactor/pioreactor01/#")
@@ -72,26 +79,30 @@ def on_unsubscribe(client, userdata, mid, reason_code_list, properties):
 
 
 def mqtt_setup(client_info):
-    print("AAAAA")
+#    print("[MQTT] - Client Info: ", vars(client_info))
     mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     mqtt_client.enable_logger()
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
     mqtt_client.on_subscribe = on_subscribe
     mqtt_client.on_unsubscribe = on_unsubscribe
-        
-    mqtt_client.username_pw_set(client_info.username, client_info.password)
-    mqtt_client.user_data_set([])
-    mqtt_client.connect(client_info.host, client_info.port, client_info.timeout)
     
+    print("[MQTT] Connect to server")
+    mqtt_client.username_pw_set(client_info.username, client_info.password)
+    mqtt_client.user_data_set({})
+    mqtt_client.connect(client_info.host, client_info.port, client_info.timeout)
+    print("[MQTT] Server connected")
+
     
     # Blocking call that processes network traffic, dispatches callbacks and
     # handles reconnecting.
     # Other loop*() functions are available that give a threaded interface and a
     # manual interface.
-#    mqttc.loop_forever()
+#    mqtt_client.loop_forever()
+    print("[MQTT] Start Loop")
     mqtt_client.loop_start()
     print(f"Received the following message: {mqtt_client.user_data_get()}")
+    print(mqtt_client)
     
     return mqtt_client
 

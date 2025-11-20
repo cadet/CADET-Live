@@ -1,39 +1,54 @@
 # -*- coding: utf-8 -*-
 
 import time
-import random
-import yaml
 
 from CADETProcess.simulator import Cadet
 
 import h5
 import mqtt
+import config
 
 
+config_file = config.get_config()
+
+configuration = config.config_to_source(config_file)
+
+sim_file = h5.load_h5_file("./cstr_one_inlet_one_mal(1).h5")
 
 client = mqtt.Client()
 
-mqtt_client = mqtt.mqtt_setup(client)
-
-sim_file = h5.load_h5_file("./data.h5")
+mqtt_client = mqtt.mqtt_setup(configuration)
+time.sleep(1)
 
 print("Info: Start loop")
-for i in range(0, 3):
+for i in range(0, 2):
     print("Iteration: ", i)
 
-    data = sim_file["input"]["model"]["unit_000"]["INIT_C"]
-#    print(data[()])
-#    data[()] = random.randint(1, 100)
-#    print(data[()])
-    
+    data = sim_file["input"]["model"]["unit_001"]["INIT_C"]
+    print(data[0])
+    current_data = mqtt_client.user_data_get()
+    data[0] = current_data["A"]
+    print(sim_file["input"]["model"]["unit_001"]["INIT_C"][()])
+    h5.save_h5_file("./cstr_one_inlet_one_mal(1).h5", sim_file)
+
      
     cadet = Cadet()
-    cadet.check_cadet()
-    time.sleep(5)
+#    cadet.check_cadet()
+#    cadet.load_from_h5("./data.h5")
+#    cadet.run_simulation()
+#    print(vars(cadet))
+    result = cadet.run_h5("./cstr_one_inlet_one_mal(1).h5")
+    print(result.root.output.solution.unit_001.SOLUTION_BULK)
+    time.sleep(10)
 
-h5.save_h5_file("./data.h5", sim_file)
+
+
+h5.save_h5_file("./cstr_one_inlet_one_mal(1).h5", sim_file)
 
 mqtt.mqtt_stop(mqtt_client)
+
+
+
 # Set the filename for the existing simulation data
 #sim.filename = sim_file
 #sim.load()

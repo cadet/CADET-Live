@@ -1,10 +1,10 @@
 source:
   mqtt:
-    - hostname: "pioreactor01"
+    - host: "pioreactor01"
       port: 1883
       username: "pioreactor"
-      password: "raspebrry"
-      timeout: 60
+      password: "raspberry"
+      timeout: 11
     - hostname: "pioreactor02"
       port: 13
       username: "pioreactor"
