@@ -62,20 +62,12 @@ dev = [
     {include-group = "testing"},
     "certifi", # tries to prevent certificate problems on windows
     "pre-commit",
-<<<<<<< HEAD
-    "ruff",
-=======
     "ruff<=0.13.0",
->>>>>>> 591e72cbaf1d976d69729f076fdf0ff4d6beb0a6
 ]
 
 [project.optional-dependencies]
 ax = [
-<<<<<<< HEAD
-    "ax-platform >=0.3.5,<1.0.0"
-=======
     "ax-platform >=0.3.5,<0.5.0"
->>>>>>> 591e72cbaf1d976d69729f076fdf0ff4d6beb0a6
 ]
 all = [
    "",
