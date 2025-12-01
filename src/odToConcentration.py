@@ -1,4 +1,4 @@
-# this scipt implements methods to convert optical density (OD) reading to concentration
+# this scipt implements a methods to convert optical density (OD) reading to concentration
 
 def lambert_beer_law(od_measurement , extinction_coefficient, wall_length = 1.0):
     """
