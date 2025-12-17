@@ -1,8 +1,12 @@
 import numpy as np
 """
-Questions: 
-- Sollten die Messungen ahnung vom Model sein? | Ja
+?Questions: 
+- Sollten die Messungen ahnung vom Model haben? | Ja
+ToDos:
+- [ ] Measurements soll warend eines Prozesses hinzugefuegzt werden koennen.
+- [ ] Messungen mussen erst transformiert werden um in den Zustandsraum zu passen. 
 """
+
 
 class Measurement:
     
@@ -36,8 +40,6 @@ class Measurement:
     def printMeasurements(self):
         for t, obs in zip(self.time_stamp, self.observed_states):
             print(f"Time: {t}, Observed State: {obs}")
-    
-
 
 class EnKalmanFilter:
 
