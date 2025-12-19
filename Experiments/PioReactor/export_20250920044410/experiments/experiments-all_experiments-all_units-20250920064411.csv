@@ -1,0 +1,5 @@
+experiment,created_at,description,media_used,organism_used,created_at_localtime
+Demo experiment,2025-09-18T19:15:25.305Z,"This is a demo experiment. Feel free to click around. When you are ready, create a new experiment in the dropdown to the left.",,,2025-09-18 21:15:25.305
+Yeast Grow,2025-09-18T21:25:08.357Z,First learning experiment,LB,ALDI Yeast,2025-09-18 23:25:08.357
+Long Yeast Grow,2025-09-18T23:19:12.988Z,Yeast grow over 24h,LB,ALDI Yeast,2025-09-19 01:19:12.988
+SauberMachen,2025-09-18T23:48:16.910Z,ein PioReactor mit einem waste und einem media zweimal spülen,,,2025-09-19 01:48:16.910
