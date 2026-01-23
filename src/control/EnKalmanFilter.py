@@ -8,12 +8,10 @@ ToDos:
 - [ ] Implementiere eine stabile methode um den nächsten Zeitpunkt zu finden.
 """
 
-from Mesurement import DFProvider, MeasureProvider
+from .Mesurement import MeasurementProvider, DFProvider
 
-class StateEstimator:
-    pass
 
-class EnKalmanFilter(StateEstimator):
+class EnKalmanFilter():
 
     def __init__(self,
                   integrator: object,
@@ -44,7 +42,7 @@ class EnKalmanFilter(StateEstimator):
     
     def update(self, 
                timepoint: float, 
-               measure: MeasureProvider
+               measure: MeasurementProvider
                ):
         
         """Update the ensemble based on the measurement."""
@@ -59,13 +57,13 @@ class EnKalmanFilter(StateEstimator):
         x_mean = np.mean(self.X_ens, axis=0, keepdims=True)
         y_mean = np.mean(Y_ens, axis=0, keepdims=True)
 
-        # Calculate deviations
-        X_dev = self.X_ens - x_mean 
-        Y_dev = Y_ens - y_mean
+        # Calculate diverences from mean
+        X_div = self.X_ens - x_mean 
+        Y_div = Y_ens - y_mean
 
         # Calculate Kalman gain
-        P_xy = (X_dev.T @ Y_dev) / (self.N_ens - 1)
-        P_yy = (Y_dev.T @ Y_dev) / (self.N_ens - 1) + measure.noise
+        P_xy = (X_div.T @ Y_div) / (self.N_ens - 1)
+        P_yy = (Y_div.T @ Y_div) / (self.N_ens - 1) + measure.noise
 
         K = P_xy @ np.linalg.inv(P_yy)
 
@@ -148,13 +146,11 @@ if __name__ == "__main__":
     )
 
     df = pd.DataFrame({
-        "t": time_points,
-        "X": measurements
+        "X": [list(zip(time_points, measurements))]
     })
 
     meas = DFProvider(
         df,
-        x_column="t",
         y_columns=["X"],
         noise=np.array([[0.01]])
     )
