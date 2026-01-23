@@ -8,7 +8,7 @@ ToDos:
 - [ ] Implementiere eine stabile methode um den nächsten Zeitpunkt zu finden.
 """
 
-from .Mesurement import MeasurementProvider, DFProvider
+from Provider import MeasurementProvider, DFProvider
 
 
 class EnKalmanFilter():
@@ -150,6 +150,7 @@ if __name__ == "__main__":
     })
 
     meas = DFProvider(
+        "TestMeasurement",
         df,
         y_columns=["X"],
         noise=np.array([[0.01]])
