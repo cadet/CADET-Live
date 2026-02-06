@@ -15,62 +15,32 @@ class TimeDependentData:
 
 
 class Provider:
-
-    _transformed = False
         
     def __init__(self,
                 name : str,
                 data: TimeDependentData = None,
-                noise : np.ndarray = np.array([[0.0]]),
-                transformation: callable = lambda x: x):
+                noise : np.ndarray = np.array([[0.0]])):
     
         self.name = name
         self.noise = noise
-        self.transformation = transformation
-        self.rawData = data #raw data
-        self.data = data # the data that can be transformed
+        self.raw_data = data #raw data
 
         if data is None:
-            self.rawData = TimeDependentData([name])
-            self.data = TimeDependentData([name])
+            self.raw_data = TimeDependentData([name])
 
     def values(self) -> np.ndarray:
-        if self._transformed:
-            return np.array([self.data[t] for t in self.times])
-        else:
-            return np.array([y for t, y in self.rawData.entry[self.name]])
+        return np.array([y for t, y in self.raw_data.entry[self.name]])
     
     def times(self) -> np.ndarray:
-        if self._transformed:
-            return np.array([item[0] for item in self.data.entry[self.name]])
-        else:
-            return np.array([item[0] for item in self.rawData.entry[self.name]])
+        return np.array([item[0] for item in self.raw_data.entry[self.name]])
     
     def nData(self) -> int:
-        return len(self.data.entry[self.name])
+        return len(self.trans_data.entry[self.name])
     
-    def transform(self):
-       self._transformed = True
-       values =  self.values
-       self.data = {t: self.transformation(y) for t, y in zip(self.times, values)}
-
-    def hasTransformed(self) -> bool:
-        return self._transformed
         
     def getRawData(self) -> np.ndarray:
-        return self.rawData
-    
-    def getRawData(self, time: float) -> np.ndarray:
-        for t, value in self.rawData.entry[self.name]:
-            if t == time:
-                return value
-        raise ValueError(f"No data available at time {time}.")
-    
-    def getData(self, time: float) -> np.ndarray:
-        return self.data[time]
-    
-    def getData(self) -> np.ndarray:
-        return self.data
+        return self.raw_data
+
     
 
 class Control(TimeDependentData):
@@ -101,15 +71,7 @@ class ControlProvider(Provider):
         return super().values()
     
     def addControl(self, name: str, time: float, value: np.ndarray):
-        self.rawData.addData(name, time, value)
-        
-        if not self._transformed:
-            self.data.addData(name, time, value)
-        else:
-            transformed_value = self.transformation(value)
-            self.data.addData(name, time, transformed_value)
-
-
+        self.raw_data.addData(name, time, value)
 
 class Mesuremtents(TimeDependentData):
     
@@ -122,10 +84,9 @@ class MeasurementProvider(Provider):
     def __init__(self,
                  name : str,
                  measurements: Mesuremtents = None,
-                 noise : np.ndarray = np.array([[0.0]]),
-                 transformation: callable = lambda x: x):
+                 noise : np.ndarray = np.array([[0.0]])):
         
-        super().__init__(name, measurements, noise, transformation)
+        super().__init__(name, measurements, noise)
 
     @property
     def numMeas(self) -> int:
@@ -142,22 +103,15 @@ class MeasurementProvider(Provider):
     def transformMeasures(self) -> np.ndarray:
         return super().transform()
     
-    def getRawMeasurement(self) -> np.ndarray:
+    def getMeasurement(self) -> np.ndarray:
         return super().getRawData()
     
-    def getRawMeasurement(self, time: float) -> np.ndarray:
+    def getMeasurement(self, time: float) -> np.ndarray:
         return super().getRawData(time)
     
-    def getMeasurement(self, time: float) -> np.ndarray:
-        return super().getData(time)
     
     def addMeasurement(self, name: str, time: float, value: np.ndarray):
-        self.rawData.addData(name, time, value)
-        if not self._transformed:
-            self.data.addData(name, time, value)
-        else:
-            transformed_value = self.transformation(value)
-            self.data.addData(name, time, transformed_value)
+        self.raw_data.addData(name, time, value)
     
 
 class DFProvider(MeasurementProvider):
@@ -166,35 +120,51 @@ class DFProvider(MeasurementProvider):
     Each column contains a list of (time, value) tuples.
     """
     def __init__(self,
+                name: str,
                 DataFrame: pd.DataFrame,
                 y_columns: list,
-                noise: np.ndarray = np.array([[0.0]]),
-                transformation: callable = lambda x: x
+                noise: np.ndarray = np.array([[0.0]])
                 ):
         
-        super().__init__()
+        super().__init__(name=name,
+                         measurements=None,
+                         noise=noise)
         
         self.df = DataFrame
         self.value_columns = y_columns
         self.noise = noise
-
-        time_value_map = {}
-        for col in self.value_columns:
-            for time, value in self.df[col].iloc[0]:  # assuming each cell contains list of tuples
-                if time not in time_value_map:
-                    time_value_map[time] = {}
-                time_value_map[col][time] = value
         
+        # Parse DataFrame and build raw_measure dictionary
+        self._build_raw_measure()
+    
+    def _build_raw_measure(self):
+        """Build a dictionary mapping time -> measurement array from DataFrame."""
         self.raw_measure = {}
-        for time in sorted(time_value_map.keys()):
-            values = [time_value_map.get(col, {}).get(time, np.nan) for col in self.value_columns]
-            self.raw_measure[time] = np.array(values)
+        
+        # Get all time points from the first column
+        for col in self.value_columns:
+            time_value_pairs = self.df[col].iloc[0]
+            for time, value in time_value_pairs:
+                if time not in self.raw_measure:
+                    self.raw_measure[time] = []
+                self.raw_measure[time].append(value)
+        
+        # Convert lists to numpy arrays
+        for time in self.raw_measure:
+            self.raw_measure[time] = np.array(self.raw_measure[time])
+    
+    def getMeasurement(self, time: float) -> np.ndarray:
+        """Get measurement at specific time point."""
+        if time not in self.raw_measure:
+            raise ValueError(f"No data available at time {time}.")
+        return self.raw_measure[time]
+    
+    @property
+    def times(self) -> np.ndarray:
+        """Get all available time points."""
+        return np.array(sorted(self.raw_measure.keys()))
 
-        self.transformation = transformation
-        self.state_measure = {
-            t: self.transformation(y)
-            for t, y in self.raw_measure.items()
-        }
+
 
 if __name__ == "__main__":
 
@@ -203,7 +173,7 @@ if __name__ == "__main__":
         "X": [[(0.0, 0.5), (1.0, 1.2), (2.0, 1.5)]],
         "S": [[(0.0, 0.1), (1.0, 0.2), (2.0, 0.3)]]
     })
-    provider = DFProvider(df, y_columns=["X", "S"])
+    provider = DFProvider("test",df, y_columns=["X", "S"])
     print(provider.raw_measure)  # → {0.0: array([0.5, 0.1]), 1.0: array([1.2, 0.2]), 2.0: array([1.5, 0.3])}
 
     
