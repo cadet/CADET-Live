@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from typing import Callable, Optional, Union, List, Dict
-
+import os
+from datetime import datetime
 
 from Provider import MeasurementProvider, DFProvider, Mesuremtents
 from Model import Model
@@ -19,7 +20,9 @@ class EnKalmanFilter:
                  initial_covariance: np.ndarray,
                  observation_func: Optional[Callable] = None,
                  providers: Optional[List[MeasurementProvider]] = None,
-                 random_seed: Optional[int] = None):#TODO delete this
+                 random_seed: Optional[int] = None,
+                 enable_logging: bool = False,
+                 log_file: Optional[str] = None):
         """
         Parameters
         ----------
@@ -35,6 +38,10 @@ class EnKalmanFilter:
             List of measurement providers for multiple measurement sources.
         random_seed : int, optional
             Random seed for reproducibility.
+        enable_logging : bool, optional
+            If True, enable logging of filter steps (default: False).
+        log_file : str, optional
+            Path to log file. If None and logging is enabled, creates a default file.
         """
         self.model = model
         self.N_ens = ensemble_size
@@ -80,6 +87,27 @@ class EnKalmanFilter:
         
         # Control input (default: zero)
         self._control = np.zeros(model.nControls)
+        
+        # Logging setup
+        self.enable_logging = enable_logging
+        self.log_file = log_file
+        self.log_data = []  # List to store log entries
+        
+        if self.enable_logging:
+            # Create log file path if not provided
+            if self.log_file is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                self.log_file = f"enkf_log_{timestamp}.csv"
+            
+            # Initialize log with initial state
+            self._log_entry(
+                time=0.0,
+                event_type="initialization",
+                state=self.state.copy(),
+                covariance_trace=np.trace(self.cov),
+                measurement=None,
+                innovation=None
+            )
     
     
     def add_provider(self, 
@@ -218,6 +246,106 @@ class EnKalmanFilter:
     def get_next_measurement_time(self):
        pass #TODO implement method to get next measurement time after a given time, optionally for a specific provider
     
+    def _log_entry(self,
+                    time: float,
+                    event_type: str,
+                    state: Optional[np.ndarray] = None,
+                    covariance_trace: Optional[float] = None,
+                    measurement: Optional[np.ndarray] = None,
+                    innovation: Optional[np.ndarray] = None):
+        """
+        Record a log entry.
+        
+        Parameters
+        ----------
+        time : float
+            Time of the event.
+        event_type : str
+            Type of event ('initialization', 'propagation', 'measurement', 'update').
+        state : np.ndarray, optional
+            State estimate at this time.
+        covariance_trace : float, optional
+            Trace of covariance matrix (measure of uncertainty).
+        measurement : np.ndarray, optional
+            Measurement vector if applicable.
+        innovation : np.ndarray, optional
+            Innovation (measurement residual) if applicable.
+        """
+        if not self.enable_logging:
+            return
+        
+        entry = {
+            'time': time,
+            'event_type': event_type,
+            'covariance_trace': covariance_trace,
+        }
+        
+        # Add state components
+        if state is not None:
+            for i, s in enumerate(state):
+                entry[f'state_{i}'] = s
+        
+        # Add measurement components
+        if measurement is not None:
+            for i, m in enumerate(np.atleast_1d(measurement)):
+                entry[f'measurement_{i}'] = m
+        
+        # Add innovation components
+        if innovation is not None:
+            for i, inn in enumerate(np.atleast_1d(innovation)):
+                entry[f'innovation_{i}'] = inn
+        
+        self.log_data.append(entry)
+    
+    def save_log(self, filepath: Optional[str] = None) -> str:
+        """
+        Save log data to CSV file.
+        
+        Parameters
+        ----------
+        filepath : str, optional
+            Path to save log file. If None, uses self.log_file.
+            
+        Returns
+        -------
+        str
+            Path to saved log file.
+        """
+        if not self.enable_logging or not self.log_data:
+            print("No log data to save.")
+            return None
+        
+        if filepath is None:
+            filepath = self.log_file
+        
+        # Convert log list to DataFrame
+        df_log = pd.DataFrame(self.log_data)
+        
+        # Create directory if needed
+        log_dir = os.path.dirname(filepath)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        
+        # Save to CSV
+        df_log.to_csv(filepath, index=False)
+        print(f"Log saved to: {filepath}")
+        return filepath
+    
+    def get_log_dataframe(self) -> pd.DataFrame:
+        """
+        Get log data as a pandas DataFrame.
+        
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing all logged entries.
+        """
+        return pd.DataFrame(self.log_data)
+    
+    def clear_log(self):
+        """Clear all log entries."""
+        self.log_data = []
+    
     def get_all_measurement_times(self) -> np.ndarray:
         """Get sorted array of all unique measurement times from all providers."""
         all_times = set()
@@ -252,7 +380,7 @@ class EnKalmanFilter:
             x_prev = self.X_ens[i, :]
             
             # Integrate using model
-            x_next = self.model.integrate(
+            x_next = self.model.integrate( #TODO make it spaces, units and phases dependet
                 x0=x_prev,
                 u=self._control,
                 t_start=t_start,
@@ -270,6 +398,14 @@ class EnKalmanFilter:
         # Update current state estimate
         self.state = np.mean(self.X_ens, axis=0)
         self.t_current = t_end
+        
+        # Log propagation step
+        self._log_entry(
+            time=t_end,
+            event_type="propagation",
+            state=self.state.copy(),
+            covariance_trace=np.trace(self.cov)
+        )
 
     def update(self,
                measurement: Union[np.ndarray, float],

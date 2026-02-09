@@ -361,7 +361,7 @@ def test_enkf_with_cadet_model(plot_results: bool = False, tolerance: float = 0.
         ax.fill_between(enkf_times, 
                         enkf_states[:, 0] - std_A,
                         enkf_states[:, 0] + std_A,
-                        alpha=0.3, color='green', label='±1σ')
+                        alpha=0.3, color='green', label='±1 sigma')
         
         ax.set_xlabel('Time')
         ax.set_ylabel('Concentration C_A')
@@ -381,7 +381,7 @@ def test_enkf_with_cadet_model(plot_results: bool = False, tolerance: float = 0.
         ax.fill_between(enkf_times,
                         enkf_states[:, 1] - std_B,
                         enkf_states[:, 1] + std_B,
-                        alpha=0.3, color='green', label='±1σ')
+                        alpha=0.3, color='green', label='±1 sigma')
         
         ax.set_xlabel('Time')
         ax.set_ylabel('Concentration C_B')
@@ -539,9 +539,9 @@ if __name__ == "__main__":
     # Run tests with optional plotting
     np.random.seed(42)
     
-    #test_stepped_vs_full_simulation(plot_results=True, tolerance=1e-2)
+    test_stepped_vs_full_simulation(plot_results=True, tolerance=1e-2)
     
-    #test_update_state_simulation(plot_results=True, tolerance=1e-2)
+    test_update_state_simulation(plot_results=True, tolerance=1e-2)
     
     test_enkf_with_cadet_model(plot_results=True, tolerance=0.2)
     
