@@ -1,16 +1,13 @@
-cadet_root = "/Users/berger/fzj/cadet/CADET-Core/install_release" #dll 
+cadet_root = "/Users/berger/fzj/cadet/CADET-Core/install_release"
 
 from cadet import Cadet
 import sys
 import os
 
-# Add src/control to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'control'))
 
-import time
 import numpy as np
 import matplotlib.pyplot as plt
-import numpy.random as random
 import pandas as pd
 
 
@@ -283,14 +280,14 @@ def test_enkf_with_cadet_model(plot_results: bool = False, tolerance: float = 0.
     
     provider_A = DFProvider(
         name="ConcentrationA",
-        DataFrame=df_A,
+        dataframe=df_A,
         y_columns=["C_A"],
         noise=np.array([[m_noise_std**2]])
     )
-    
+
     provider_B = DFProvider(
         name="ConcentrationB",
-        DataFrame=df_B,
+        dataframe=df_B,
         y_columns=["C_B"],
         noise=np.array([[m_noise_std**2]])
     )
@@ -449,7 +446,7 @@ def test_update_reset_trajectory(plot_results: bool = False, tolerance: float = 
     unitId = 0
 
     return_info, t_reached = model.perform_simulation_step(t_init)
-    assert return_info.return_code == 0, f"First trajectory step {i} failed"
+    assert return_info.return_code == 0, "Initial simulation step failed"
     
     res = model.cadet_runner.res
 

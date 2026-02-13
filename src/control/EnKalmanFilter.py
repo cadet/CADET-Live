@@ -1,18 +1,16 @@
+import logging
+
 import numpy as np
 import pandas as pd
 from typing import Callable, Optional, Union, List, Dict
 import os
 from datetime import datetime
 
-from Provider import MeasurementProvider, DFProvider, Mesuremtents
+from Provider import MeasurementProvider, DFProvider
 from Model import Model
 
-
+logger = logging.getLogger(__name__)
 class EnKalmanFilter:
-    """
-    Ensemble Kalman Filter for state estimation.
-
-    """
 
     def __init__(self,
                  model: Model,
@@ -20,29 +18,9 @@ class EnKalmanFilter:
                  initial_covariance: np.ndarray,
                  observation_func: Optional[Callable] = None,
                  providers: Optional[List[MeasurementProvider]] = None,
-                 random_seed: Optional[int] = None,
-                 enable_logging: bool = False,
-                 log_file: Optional[str] = None):
-        """
-        Parameters
-        ----------
-        model : Model
-            Dynamical system model (CadetModel or CasadiModel).
-        ensemble_size : int
-            Number of ensemble members.
-        initial_covariance : np.ndarray
-            Initial state covariance matrix (nStates x nStates).
-        observation_func : callable, optional
-            Nonlinear observation function h(x) -> y.
-        providers : List[MeasurementProvider], optional
-            List of measurement providers for multiple measurement sources.
-        random_seed : int, optional
-            Random seed for reproducibility.
-        enable_logging : bool, optional
-            If True, enable logging of filter steps (default: False).
-        log_file : str, optional
-            Path to log file. If None and logging is enabled, creates a default file.
-        """
+                 random_seed: Optional[int] = None):
+        
+
         self.model = model
         self.N_ens = ensemble_size
         self.cov = np.atleast_2d(initial_covariance)
@@ -62,7 +40,7 @@ class EnKalmanFilter:
                 self.add_provider(prov)
             
         # Build measurement noise from providers if not explicitly given
-        self.measurement_noise = self._build_measurement_noise_from_providers()
+        self.measurement_noise = self._generate_combined_noise()
         
         # Set up observation model
         if observation_func is not None:
@@ -84,61 +62,17 @@ class EnKalmanFilter:
         
         # Track current time
         self.t_current = 0.0
-        
-        # Control input (default: zero)
-        self._control = np.zeros(model.nControls)
-        
-        # Logging setup
-        self.enable_logging = enable_logging
-        self.log_file = log_file
-        self.log_data = []  # List to store log entries
-        
-        if self.enable_logging:
-            # Create log file path if not provided
-            if self.log_file is None:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                self.log_file = f"enkf_log_{timestamp}.csv"
-            
-            # Initialize log with initial state
-            self._log_entry(
-                time=0.0,
-                event_type="initialization",
-                state=self.state.copy(),
-                covariance_trace=np.trace(self.cov),
-                measurement=None,
-                innovation=None
-            )
-    
+                
     
     def add_provider(self, 
                      provider: MeasurementProvider,
                      observed_state_indices: Optional[List[int]] = None):
-        """
-        Add a measurement provider.
         
-        Parameters
-        ----------
-        provider : MeasurementProvider
-            The measurement provider to add.
-        observed_state_indices : List[int], optional
-            Which state indices this provider observes.
-            If None, assumes sequential indices based on provider order.
-        """
         self._providers[provider.name] = provider
         if observed_state_indices is not None:
             self._provider_obs_indices[provider.name] = observed_state_indices
-    
-    def remove_provider(self, name: str):
-        """Remove a measurement provider by name."""
-        if name in self._providers:
-            del self._providers[name]
-            if name in self._provider_obs_indices:
-                del self._provider_obs_indices[name]
-    
-    def get_provider(self, name: str) -> Optional[MeasurementProvider]:
-        """Get a measurement provider by name."""
-        return self._providers.get(name)
-    
+
+
     @property
     def providers(self) -> Dict[str, MeasurementProvider]:
         """Get all registered measurement providers."""
@@ -149,7 +83,7 @@ class EnKalmanFilter:
         """Get names of all registered providers."""
         return list(self._providers.keys())
     
-    def _build_measurement_noise_from_providers(self) -> np.ndarray:
+    def _generate_combined_noise(self) -> np.ndarray:
         """Build combined measurement noise matrix from all providers."""
         if not self._providers:
             return np.array([[0.01]])  # Default fallback
@@ -167,184 +101,14 @@ class EnKalmanFilter:
         # Build diagonal noise matrix
         return np.diag(noise_values) if noise_values else np.array([[0.01]])
         
-    def get_all_measurements(self, timepoint: float) -> np.ndarray:
-        """
-        Get combined measurements from all providers at a timepoint.
-        
-        Parameters
-        ----------
-        timepoint : float
-            Time at which to retrieve measurements.
-            
-        Returns
-        -------
-        np.ndarray
-            Combined measurement vector from all providers.
-        """
+    def get_all_measurements(self, timepoint: float) -> Optional[np.ndarray]:
         measurements = []
         for name, prov in self._providers.items():
-            try:
-                meas = prov.getMeasurement(timepoint)
-                measurements.extend(np.atleast_1d(meas).flatten())
-            except ValueError:
-                # No measurement available at this time from this provider
-                pass
-        
-        return np.array(measurements) if measurements else None
-    
-    def get_measurements(self, 
-                                       timepoint: float, 
-                                       method: str = 'nearest') -> np.ndarray:
-        """
-        Get measurements with interpolation for missing timepoints.
-        
-        Parameters
-        ----------
-        timepoint : float
-            Time at which to retrieve measurements.
-        method : str
-            Interpolation method: 'nearest', 'linear', or 'zero' (use zero if missing).
-            
-        Returns
-        -------
-        np.ndarray
-            Combined measurement vector.
-        """
-        measurements = []
-        for name, prov in self._providers.items():
-            meas = self._get_measurement(prov, timepoint, method)
+            meas = prov.get_measurement(timepoint)
             if meas is not None:
                 measurements.extend(np.atleast_1d(meas).flatten())
-        
+
         return np.array(measurements) if measurements else None
-    
-    def _get_measurement(self, 
-                                       provider: MeasurementProvider,
-                                       timepoint: float,
-                                       method: str) -> Optional[np.ndarray]:
-        """Get measurement from single provider with interpolation."""
-        try:
-            return provider.getMeasurement(timepoint)
-        except ValueError:
-            # Timepoint not available, try interpolation
-            available_times = provider.times
-            if len(available_times) == 0:
-                return None
-            
-            if method == 'nearest':
-                idx = np.argmin(np.abs(available_times - timepoint))
-                nearest_time = available_times[idx]
-                return provider.getMeasurement(nearest_time)
-            elif method == 'linear':
-                pass #TODO implement linear interpolation between closest time points
-            
-            elif method == 'zero':
-                return None
-            
-            return None
-    
-    def get_next_measurement_time(self):
-       pass #TODO implement method to get next measurement time after a given time, optionally for a specific provider
-    
-    def _log_entry(self,
-                    time: float,
-                    event_type: str,
-                    state: Optional[np.ndarray] = None,
-                    covariance_trace: Optional[float] = None,
-                    measurement: Optional[np.ndarray] = None,
-                    innovation: Optional[np.ndarray] = None):
-        """
-        Record a log entry.
-        
-        Parameters
-        ----------
-        time : float
-            Time of the event.
-        event_type : str
-            Type of event ('initialization', 'propagation', 'measurement', 'update').
-        state : np.ndarray, optional
-            State estimate at this time.
-        covariance_trace : float, optional
-            Trace of covariance matrix (measure of uncertainty).
-        measurement : np.ndarray, optional
-            Measurement vector if applicable.
-        innovation : np.ndarray, optional
-            Innovation (measurement residual) if applicable.
-        """
-        if not self.enable_logging:
-            return
-        
-        entry = {
-            'time': time,
-            'event_type': event_type,
-            'covariance_trace': covariance_trace,
-        }
-        
-        # Add state components
-        if state is not None:
-            for i, s in enumerate(state):
-                entry[f'state_{i}'] = s
-        
-        # Add measurement components
-        if measurement is not None:
-            for i, m in enumerate(np.atleast_1d(measurement)):
-                entry[f'measurement_{i}'] = m
-        
-        # Add innovation components
-        if innovation is not None:
-            for i, inn in enumerate(np.atleast_1d(innovation)):
-                entry[f'innovation_{i}'] = inn
-        
-        self.log_data.append(entry)
-    
-    def save_log(self, filepath: Optional[str] = None) -> str:
-        """
-        Save log data to CSV file.
-        
-        Parameters
-        ----------
-        filepath : str, optional
-            Path to save log file. If None, uses self.log_file.
-            
-        Returns
-        -------
-        str
-            Path to saved log file.
-        """
-        if not self.enable_logging or not self.log_data:
-            print("No log data to save.")
-            return None
-        
-        if filepath is None:
-            filepath = self.log_file
-        
-        # Convert log list to DataFrame
-        df_log = pd.DataFrame(self.log_data)
-        
-        # Create directory if needed
-        log_dir = os.path.dirname(filepath)
-        if log_dir and not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
-        
-        # Save to CSV
-        df_log.to_csv(filepath, index=False)
-        print(f"Log saved to: {filepath}")
-        return filepath
-    
-    def get_log_dataframe(self) -> pd.DataFrame:
-        """
-        Get log data as a pandas DataFrame.
-        
-        Returns
-        -------
-        pd.DataFrame
-            DataFrame containing all logged entries.
-        """
-        return pd.DataFrame(self.log_data)
-    
-    def clear_log(self):
-        """Clear all log entries."""
-        self.log_data = []
     
     def get_all_measurement_times(self) -> np.ndarray:
         """Get sorted array of all unique measurement times from all providers."""
@@ -352,38 +116,39 @@ class EnKalmanFilter:
         for prov in self._providers.values():
             all_times.update(prov.times)
         return np.array(sorted(all_times))
+    
+    def _get_measurement(self,
+                            provider: MeasurementProvider,
+                            timepoint: float,
+                            method: str) -> Optional[np.ndarray]:
+        """Get measurement from single provider using the specified method."""
+        return provider.get_measurement(timepoint, method=method)
+    
+    def get_measurements(self,
+                            timepoint: float,
+                            method: str = 'nearest') -> Optional[np.ndarray]:
 
-    def set_control(self, u: np.ndarray):
-        """Set the control input for the next propagation step."""
-        self._control = np.array(u, dtype=float).flatten()
+        measurements = []
+        for name, prov in self._providers.items():
+            meas = self._get_measurement(prov, timepoint, method)
+            if meas is not None:
+                measurements.extend(np.atleast_1d(meas).flatten())
+            else:
+                logger.warning("No measurement from '%s' at t=%.4f", name, timepoint)
+
+        return np.array(measurements) if measurements else None
+    
 
     def propagate(self, 
-                  t_start: float, 
-                  t_end: float,
-                  u: Optional[np.ndarray] = None):
-        """
-        Propagate the ensemble from t_start to t_end.
-        
-        Parameters
-        ----------
-        t_start : float
-            Start time.
-        t_end : float
-            End time.
-        u : np.ndarray, optional
-            Control input. If None, uses previously set control.
-        """
-        if u is not None:
-            self._control = np.array(u, dtype=float).flatten()
+                  t_end: float):
         
         for i in range(self.N_ens):
             x_prev = self.X_ens[i, :]
             
+            self.model.update_state(x_prev, self.t_current)
+
             # Integrate using model
-            x_next = self.model.integrate( #TODO make it spaces, units and phases dependet
-                x0=x_prev,
-                u=self._control,
-                t_start=t_start,
+            x_next = self.model.integrate(
                 t_end=t_end
             )
             
@@ -392,34 +157,17 @@ class EnKalmanFilter:
                 np.zeros(self.model.nStates), 
                 self.model._process_noise
             )
-            
+
             self.X_ens[i, :] = x_next + w
         
         # Update current state estimate
         self.state = np.mean(self.X_ens, axis=0)
         self.t_current = t_end
         
-        # Log propagation step
-        self._log_entry(
-            time=t_end,
-            event_type="propagation",
-            state=self.state.copy(),
-            covariance_trace=np.trace(self.cov)
-        )
 
-    def update(self,
-               measurement: Union[np.ndarray, float],
-               timepoint: Optional[float] = None):
-        """
-        Update the ensemble based on a measurement.
-        
-        Parameters
-        ----------
-        measurement : np.ndarray or float
-            Measurement vector or scalar.
-        timepoint : float, optional
-            Time of measurement (for logging purposes).
-        """
+    def _update(self,
+               measurement: Union[np.ndarray, float]):
+
         y_meas = np.atleast_1d(measurement).flatten()
         
         # Generate ensemble of predicted observations
@@ -456,73 +204,43 @@ class EnKalmanFilter:
         self.state = np.mean(self.X_ens, axis=0)
         self.cov = np.cov(self.X_ens.T) + 1e-9 * np.eye(self.model.nStates)
 
-    def update_from_provider(self, timepoint: float):
-        """
-        Update using measurement from the configured provider(s).
-        
-        Parameters
-        ----------
-        timepoint : float
-            Time at which to retrieve measurement.
-        """
+    def update_state_with_measurement(self,
+             t_end: float,
+             measurement: Union[np.ndarray, float]):
+
+        self.propagate(t_end)
+        self._update(measurement)
+        return self.state.copy()
+
+    def _update_with_interpolation(self,
+                    timepoint: float,
+                    method: str = 'nearest'):
         if not self._providers:
             raise ValueError("No measurement providers configured.")
-        
-        y_meas = self.get_all_measurements(timepoint)
-        if y_meas is None or len(y_meas) == 0:
-            raise ValueError(f"No measurements available at time {timepoint}.")
-        
-        self.update(y_meas, timepoint)
-    
-    def update_from_providers_interpolated(self, 
-                                            timepoint: float,
-                                            method: str = 'nearest'):
-        """
-        Update using interpolated measurements from all providers.
-        
-        Parameters
-        ----------
-        timepoint : float
-            Time at which to retrieve measurement.
-        method : str
-            Interpolation method: 'nearest', 'linear', or 'zero'.
-        """
-        if not self._providers:
-            raise ValueError("No measurement providers configured.")
-        
+
         y_meas = self.get_measurements(timepoint, method)
         if y_meas is None or len(y_meas) == 0:
-            raise ValueError(f"No measurements available near time {timepoint}.")
-        
-        self.update(y_meas, timepoint)
+            logger.warning("No measurements at t=%.4f, skipping update.", timepoint)
+            return
+
+        if len(y_meas) != self._nMeas:
+            logger.warning(
+                "Expected %d measurements at t=%.4f, got %d. Skipping update.",
+                self._nMeas, timepoint, len(y_meas)
+            )
+            return
+
+        self._update(y_meas)
     
-    def step_with_providers(self,
-                            t_start: float,
+    def update_state_with_interpolation(self,
                             t_end: float,
-                            u: Optional[np.ndarray] = None,
                             interpolation: str = 'nearest') -> np.ndarray:
-        """
-        Perform EnKF step using measurements from configured providers.
-        
-        Parameters
-        ----------
-        t_start : float
-            Start time.
-        t_end : float
-            End time (measurement time).
-        u : np.ndarray, optional
-            Control input during propagation.
-        interpolation : str
-            Interpolation method for measurements.
-            
-        Returns
-        -------
-        np.ndarray
-            Updated state estimate.
-        """
-        self.propagate(t_start, t_end, u)
-        self.update_from_providers_interpolated(t_end, interpolation)
+
+        self.propagate(t_end)
+        self._update_with_interpolation(t_end, interpolation)
         return self.state.copy()
+
+
     
     def run_filter(self,
                    t_start: float = 0.0,
@@ -530,26 +248,6 @@ class EnKalmanFilter:
                    dt: Optional[float] = None,
                    use_measurement_times: bool = True,
                    interpolation: str = 'nearest') -> Dict[str, np.ndarray]:
-        """
-        Run the EnKF over a time range using configured providers.
-        
-        Parameters
-        ----------
-        t_start : float
-            Start time.
-        t_end : float, optional
-            End time. If None, uses last measurement time.
-        dt : float, optional
-            Time step for propagation. If None, uses measurement times.
-        use_measurement_times : bool
-            If True, step at measurement times. If False, use fixed dt.
-        interpolation : str
-            Interpolation method for measurements.
-            
-        Returns
-        -------
-        Dict with 'times', 'states', 'covariances' arrays.
-        """
         if not self._providers:
             raise ValueError("No measurement providers configured.")
         
@@ -574,8 +272,7 @@ class EnKalmanFilter:
         
         t_current = t_start
         for t_next in time_grid:
-            state_est = self.step_with_providers(
-                t_start=t_current,
+            state_est = self.update_state_with_interpolation(
                 t_end=t_next,
                 interpolation=interpolation
             )
@@ -590,34 +287,6 @@ class EnKalmanFilter:
             'covariances': np.array(covariances)
         }
 
-    def step(self,
-             t_start: float,
-             t_end: float,
-             measurement: Union[np.ndarray, float],
-             u: Optional[np.ndarray] = None):
-        """
-        Perform a complete EnKF step: propagate and update.
-        
-        Parameters
-        ----------
-        t_start : float
-            Start time.
-        t_end : float
-            End time (measurement time).
-        measurement : np.ndarray or float
-            Measurement at t_end.
-        u : np.ndarray, optional
-            Control input during propagation.
-            
-        Returns
-        -------
-        np.ndarray
-            Updated state estimate.
-        """
-        self.propagate(t_start, t_end, u)
-        self.update(measurement, t_end)
-        return self.state.copy()
-
 
     @property
     def nMeas(self) -> int:
@@ -629,36 +298,15 @@ class EnKalmanFilter:
         """Number of ensemble members."""
         return self.N_ens
 
-    def get_state(self, idx: Optional[int] = None) -> np.ndarray:
-        """
-        Get current state estimate.
-        
-        Parameters
-        ----------
-        idx : int, optional
-            Index of specific state. If None, returns full state.
-        """
-        if idx is None:
-            return self.state.copy()
-        return self.state[idx]
-
-    def get_covariance(self) -> np.ndarray:
-        """Get current state covariance estimate."""
-        return self.cov.copy()
-    
-    def get_ensemble(self) -> np.ndarray:
-        """Get current ensemble matrix (N_ens x nStates)."""
-        return self.X_ens.copy()
-
 
 if __name__ == "__main__":
+    #logging.basicConfig(level=logging.DEBUG,
+    #                    format="%(asctime)s [%(levelname)s] %(message)s")
+    
     import casadi as ca
     import matplotlib.pyplot as plt
     from Model import CasadiModel, CadetModel
 
-    print("="*60)
-    print("Example 1: EnKF with CasADi Model and Multiple Providers")
-    print("="*60)
 
     # Define CasADi model: simple CSTR dynamics
     X = ca.SX.sym('X')  # Biomass
@@ -709,9 +357,10 @@ if __name__ == "__main__":
     for t_idx in range(int(T / dt)):
         t = t_idx * dt
         time_points.append(t)
-        
+
         # Simulate true system
-        x_next = casadi_model.integrate(x_current, np.array([]), t, t + dt)
+        casadi_model.update_state(x_current, t)
+        x_next = casadi_model.integrate(t + dt)
         true_states.append(x_next.copy())
         
         # Create noisy measurements from different sensors
@@ -738,14 +387,14 @@ if __name__ == "__main__":
     # Create MeasurementProviders
     biomass_provider = DFProvider(
         name="BiomassOD",
-        DataFrame=df_biomass,
+        dataframe=df_biomass,
         y_columns=["X"],
         noise=np.array([[0.05**2]])  # Variance
     )
-    
+
     substrate_provider = DFProvider(
         name="SubstrateConc",
-        DataFrame=df_substrate,
+        dataframe=df_substrate,
         y_columns=["S"],
         noise=np.array([[0.03**2]])  # Variance
     )
@@ -757,36 +406,31 @@ if __name__ == "__main__":
         return np.asarray(x)[:2]
     
     # Create EnKF with multiple providers
-    # Observation matrix: [1, 0, 0] for X, [0, 1, 0] for S -> combined [1,0,0; 0,1,0]
+    casadi_model.update_state(X0, 0.0)
     enkf = EnKalmanFilter(
         model=casadi_model,
-        initial_state=X0,
         ensemble_size=50,
         initial_covariance=np.diag([0.1, 0.1, 0.1]),
         observation_func=func,
         providers=[biomass_provider, substrate_provider],
         random_seed=42
     )
-    
+
     print(f"\nRegistered providers: {enkf.provider_names}")
     print(f"All measurement times: {enkf.get_all_measurement_times()}")
-    
+
     # Run EnKF using the run_filter method
-    print("\n--- Running EnKF with multiple providers ---")
     results = enkf.run_filter(
         t_start=0.0,
         t_end=T,
         use_measurement_times=True,
         interpolation='nearest'
     )
-    
-    print(f"Filter ran for {len(results['times'])} time steps")
-    
-    # Also demonstrate manual stepping
-    print("\n--- Manual stepping example ---")
+
+    # Now demonstrate manual stepping with measurement retrieval
+    casadi_model.update_state(X0, 0.0)
     enkf2 = EnKalmanFilter(
         model=casadi_model,
-        initial_state=X0,
         ensemble_size=50,
         initial_covariance=np.diag([0.1, 0.1, 0.1]),
         observation_func=func,
@@ -803,13 +447,11 @@ if __name__ == "__main__":
         if t <= 0:
             continue
         
-        # Get measurements (with interpolation for missing values)
         meas = enkf2.get_measurements(t, method='nearest')
         print(f"Time {t:.2f}: Measurements = {meas}")
-        
+
         # Step
-        state_est = enkf2.step(
-            t_start=t_prev,
+        state_est = enkf2.update_state_with_measurement(
             t_end=t,
             measurement=meas
         )
@@ -857,6 +499,3 @@ if __name__ == "__main__":
     plt.savefig('enkf_multi_provider_results.png', dpi=150)
     plt.show()
     
-    print("\n" + "="*60)
-    print("Multi-Provider EnKF example completed successfully!")
-    print("="*60)

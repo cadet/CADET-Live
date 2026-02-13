@@ -1,0 +1,2 @@
+experiment,pioreactor_unit,started_at,ended_at,automation_name,settings,json_settings,started_at_localtime,ended_at_localtime,hours_since_experiment_created
+Yeast Grow 4 Days,pioreactor02,2025-09-20T05:14:10.145000Z,2025-09-20T05:14:10.178000Z,thermostat,eyJ0YXJnZXRfdGVtcGVyYXR1cmUiOjMyLjAsInN0YXRlIjoiaW5pdCJ9,"{""target_temperature"":32.0,""state"":""init""}",2025-09-20 07:14:10.145,2025-09-20 07:14:10.178,0.196944444444

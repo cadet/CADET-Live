@@ -2,9 +2,10 @@ import numpy as np
 import casadi as ca
 from abc import ABC, abstractmethod
 from cadet import Cadet
-#things to do:
-# TODO: think about what is an experiment and what is a model 
 
+# TODO: think about what is an experiment and what is a model
+# TODO: change from indicies to cadet variable and state dict
+# TODO: add optinal indices to update state
 class Model(ABC):
     """Abstract base class for dynamical system models.
     
@@ -15,29 +16,14 @@ class Model(ABC):
     """
 
     @abstractmethod
-    def integrate(self, 
-                  x0: np.ndarray, 
-                  u: np.ndarray,
-                  t_start: float, 
+    def integrate(self,
                   t_end: float) -> np.ndarray:
         """Integrate the model from t_start to t_end.
-        
-        Parameters
-        ----------
-        x0 : np.ndarray
-            Initial state vector.
-        u : np.ndarray
-            Control input vector.
-        t_start : float
-            Start time of integration.
-        t_end : float
-            End time of integration.
-            
-        Returns
-        -------
-        np.ndarray
-            State vector at t_end.
         """
+        pass
+
+    def update_state(self, x0: np.ndarray, t_start: float):
+        """Optional method to update the model's internal state before integration."""
         pass
 
     @property
@@ -47,9 +33,8 @@ class Model(ABC):
         pass
 
     @property
-    @abstractmethod
     def nControls(self) -> int:
-        """Number of control inputs."""
+        """Optional Number of control inputs."""
         pass
 
 
@@ -57,13 +42,13 @@ class CadetModel(Model):
     """CADET-based dynamical system model."""
 
     def __init__(self, 
-                 cadet_path: str,
-                 init_state: np.ndarray, #TODO delete this and get this from cadet
+                 cadet_path: str, #TODO be flexible also allow the direct model object 
+                 init_state: np.ndarray,
                  model_path: str,
                  n_states: int,
                  n_controls: int = 0,
                  process_noise: np.ndarray = None,
-                 state_indices: list = None): #TODO make experiment handle this
+                 state_indices: list = None):
         """
         Parameters
         ----------
@@ -94,25 +79,31 @@ class CadetModel(Model):
         self.model.save()
         self.model.initialize_simulation()
         self.t_curr = 0.0
+    
+    def update_state(self, x0: np.ndarray, t_start: float):
+        """Update the state in the CADET model."""
+        try:
+            X0_full = np.zeros(7)
+            X0_full[self._state_indices] = x0
+            X0_full[4] = 1.0 # Assuming index 4 is a required state (e.g., volume)
+            self.model.update_state(X0_full, t_start, len(X0_full))
+            self.t_curr = t_start
+        
+        except Exception as e:
+            print(f"CADET state update error: {e}")
 
-    def integrate(self, 
-                  x0: np.ndarray, 
-                  u: np.ndarray,
-                  t_start: float,
+    def integrate(self,
                   t_end: float) -> np.ndarray:
         """Integrate the CADET model from t_start to t_end."""
         try:
-            # Update state in CADET model
-            self.model.update_state(x0, t_start, len(x0))
-            self.t_curr = t_start
-            
+
             # Perform simulation step
             ret = self.model.perform_simulation_step(t_end)
             if ret[0].return_code != 0:
                 raise RuntimeError(f"CADET simulation step failed: {ret[0].error_message}")
 
             # Extract state from result
-            res = self.model.cadet_runner.res
+            res = self.model.cadet_runner.res 
             full_state = res.last_state_y()
             
             # Extract relevant state components
@@ -123,7 +114,7 @@ class CadetModel(Model):
         
         except Exception as e:
             print(f"CADET integration error: {e}")
-            return x0.copy()  # Return unchanged state on error
+            
     
     def end_simulation(self):
         """End the CADET simulation."""
@@ -183,9 +174,11 @@ class CasadiModel(Model):
         self._states_sym = states
         self._controls_sym = controls
         self._ode = ode
+        self._init_state = np.array(init_state, dtype=float)
         self._state = np.array(init_state, dtype=float)
         self._dt = float(dt)
         self._T = float(T)
+        self.t_curr = 0.0
 
         # Dimensions
         self._nStates = states.size1()
@@ -196,8 +189,6 @@ class CasadiModel(Model):
             self._process_noise = process_noise
         else:
             self._process_noise = np.diag([0.0]*self._nStates)
-
-
 
         # Build CasADi integrator function
         self._integrator_func = self._create_integrator(integrator_type)
@@ -213,7 +204,6 @@ class CasadiModel(Model):
         }
 
         opts = {
-            'tf': self._dt,  # Default integration time
             'abstol': 1e-8,
             'reltol': 1e-8,
             'max_num_steps': 10000,
@@ -223,39 +213,35 @@ class CasadiModel(Model):
             'casadi_integrator',
             integrator_type,
             dae,
+            0, self._dt,
             opts
         )
 
+    def update_state(self, x0: np.ndarray, t_start: float):
+        """Update the model's internal state before integration."""
+        self._state = np.array(x0, dtype=float)
+        self.t_curr = t_start
+
     def integrate(self,
-                  x0: np.ndarray,
-                  u: np.ndarray,
-                  t_start: float,
                   t_end: float) -> np.ndarray:
-        """
-        Integrate the CasADi model from t_start to t_end.
-        For autonomous ODEs (time-invariant), uses relative time (t_end - t_start).
-        """
-        x_current = np.array(x0, dtype=float)
-        
+        """Integrate the CasADi model from current time to t_end."""
         # Handle empty control vector
         if self._nControls == 0:
             u_param = np.array([])
         else:
-            u_param = np.array(u, dtype=float).flatten()
-        
-        # For autonomous systems, integrate for duration (t_end - t_start)
-        # Create integrator with correct time span
-        duration = t_end - t_start
-        
+            u_param = np.zeros(self._nControls)
+
+        duration = t_end - self.t_curr
+
         if abs(duration - self._dt) > 1e-10:
-            # Need different integration time - create temporary integrator
             temp_integrator = self._create_integrator_with_tf(duration)
-            result = temp_integrator(x0=x_current, p=u_param)
+            result = temp_integrator(x0=self._state, p=u_param)
         else:
-            result = self._integrator_func(x0=x_current, p=u_param)
-        
+            result = self._integrator_func(x0=self._state, p=u_param)
+
         x_next = np.array(result['xf']).flatten()
-        
+        self.t_curr = t_end
+
         return x_next
     
     def _create_integrator_with_tf(self, tf: float):
@@ -269,16 +255,16 @@ class CasadiModel(Model):
         }
         
         opts = {
-            'tf': tf,
             'abstol': 1e-8,
             'reltol': 1e-8,
             'max_num_steps': 10000,
         }
-        
+
         return ca.integrator(
             'temp_integrator',
             self._integrator_type,
             dae,
+            0, tf,
             opts
         )
     
@@ -305,25 +291,6 @@ class CasadiModel(Model):
     @property
     def nControls(self) -> int:
         return self._nControls
-    
-    @property
-    def states_sym(self) -> ca.SX:
-        """Symbolic state vector."""
-        return self._states_sym
-    
-    @property
-    def controls_sym(self) -> ca.SX:
-        """Symbolic control vector."""
-        return self._controls_sym
-    
-    @property
-    def ode(self) -> callable:
-        """ODE function f(x, u)."""
-        return self._ode
-    
-    @init_state.setter
-    def init_state(self, value: np.ndarray):
-        self._init_state = np.array(value, dtype=float)
 
     @dt.setter
     def dt(self, value: float):
