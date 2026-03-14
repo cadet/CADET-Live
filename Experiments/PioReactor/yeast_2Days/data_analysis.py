@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import casadi as ca
 
-DATA_PATH =  "/Users/berger/fzj/cadet/CADET-Live/Experiments/PioReactor/yeast_2Days/export_20250921082017"
+DATA_PATH =  "/Users/berger/fzj/cadet/CADET-Live/Experiments/PioReactor/yeast_2Days/data/export_20250921082017"
 
 df_od_readings = pd.read_csv(f"{DATA_PATH}/od_readings/od_readings-Yeast_Grow_4_Days-all_units-20250921102018.csv")
 first_10_hours = df_od_readings[df_od_readings['hours_since_experiment_created'] <= 10]
