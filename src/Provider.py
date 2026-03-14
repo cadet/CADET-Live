@@ -1,5 +1,7 @@
 from typing import Dict, List, Optional, Tuple, Union
 
+import threading
+
 import numpy as np
 import pandas as pd
 from scipy.linalg import block_diag
@@ -24,16 +26,18 @@ class TimeDependentData:
     ) -> None:
         self.name = name
         self._data: List[Tuple[float, np.ndarray]] = []  # [(time, value), ...]
+        self._lock = threading.Lock()
 
         # Core metadata
         self.noise = noise if noise is not None else np.array([[0.0]])
         self.state_index = state_index
 
     def add_data(self, time: float, value: Union[float, np.ndarray]) -> None:
-        """Add a data point and maintain time-sorted order."""
+        """Add a data point and maintain time-sorted order. Thread-safe."""
         value_array = np.atleast_1d(value)
-        self._data.append((time, value_array))
-        self._data.sort(key=lambda x: x[0])
+        with self._lock:
+            self._data.append((time, value_array))
+            self._data.sort(key=lambda x: x[0])
 
     def get_data(
         self, time: float, method: str = "exact"

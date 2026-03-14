@@ -33,13 +33,9 @@ def config_to_source(config):
     else:
         print("No source found")
 
-#my_config = get_config()
 
-#my_client = config_to_source(my_config)
-
-
-#print("my_config: ", my_config)
-
-#print("my_client: ", vars(my_client))
+def get_topic_map(config):
+    """Extract the topic_map section from the config."""
+    return config.get("topic_map", None)
 
 

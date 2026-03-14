@@ -1,0 +1,43 @@
+# TODO autmate 
+source:
+  mqtt:
+    - host: "10.42.0.1"
+      port: 1883
+      username: "pioreactor"
+      password: "raspberry"
+      timeout: 11
+
+# Topic mapping: connects MQTT topics to Provider variables
+# NOTE: Topics are from PioReactor experiment "Test"
+topic_map:
+  measurements:
+    # OD (Optische Dichte) - extract from nested JSON structure
+    # Payload: {"timestamp":"...","ods":{"2":{"od":0.0002...}}}
+    - name: "od"
+      topic_suffix: "/Test/od_reading/ods"
+      payload_parser: "od_channel_2"
+      noise: 0.001
+      state_index: 1  # Maps to S (substrate) in CSTR
+
+    # Stirring RPM
+    # Payload: {"measured_rpm":539.3,"timestamp":"..."}
+    - name: "rpm"
+      topic_suffix: "/Test/stirring/measured_rpm"
+      payload_key: "measured_rpm"
+      noise: 10.0
+      state_index: null
+
+    # Temperature
+    # Payload: {"temperature":25.3,"timestamp":"..."}
+    - name: "temperature"
+      topic_suffix: "/Test/temperature_automation/temperature"
+      payload_key: "temperature"
+      noise: 0.1
+      state_index: null
+
+  controls:
+    - name: "stirring_rate"
+      topic: "pioreactor/pioreactor01/Test/stirring/target_rpm"
+    - name: "temperature_setpoint"
+      topic: "pioreactor/pioreactor01/Test/temperature_automation/target_temperature"
+    
