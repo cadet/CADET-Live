@@ -1,6 +1,6 @@
 source:
   mqtt:
-    - host: "pioreactor01"
+    - host: "10.42.0.1"
       port: 1883
       username: "pioreactor"
       password: "raspberry"
