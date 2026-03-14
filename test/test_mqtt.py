@@ -3,10 +3,16 @@
 """
 Test-Script zum Überprüfen der MQTT-Verbindung mit dem PioReactor
 """
+import os
+import sys
 
 import paho.mqtt.client as mqtt
 import time
 from datetime import datetime
+
+_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, _SRC)
+
 import config
 
 def on_connect(client, userdata, flags, reason_code, properties):
@@ -21,9 +27,8 @@ def on_message(client, userdata, message):
     print(f"  Payload: {message.payload.decode()}")
     userdata["count"] += 1
     
-    # Nach 20 empfangenen Nachrichten stoppen
-    if userdata["count"] >= 20:
-        print("\n✓ Test erfolgreich! 20 Nachrichten empfangen.")
+    if userdata["count"] >= 40:
+        print("\n Test erfolgreich! 40 Nachrichten empfangen.")
         client.disconnect()
 
 def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
@@ -31,8 +36,8 @@ def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
 
 # Config laden
 print("1. Lade Konfiguration...")
-config_file = config.get_config()
-mqtt_config = config.config_to_source(config_file)
+cfg = config.get_config(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml'))
+mqtt_config = config.config_to_source(cfg)
 
 print(f"   Host: {mqtt_config.host}")
 print(f"   Port: {mqtt_config.port}")
