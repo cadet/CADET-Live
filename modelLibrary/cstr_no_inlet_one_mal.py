@@ -11,7 +11,7 @@ parameters = {
 }
 
 # create Cadet model
-cstr_model = Cadet(r"/Users/berger/fzj/cadet/CADET-Core/install_release")
+cstr_model = Cadet(install_path = r"/Users/berger/fzj/cadet/CADET-Core/install_release",use_dll = True)
 
 ncomp = parameters["ncomp"]
 init_c = parameters["init_c"]
