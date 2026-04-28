@@ -30,3 +30,6 @@ topic_map:
       topic_suffix: "od_reading/od2"
       type: "tuple"
       label: "od"
+
+simulation:
+  filepath: "./modelLibrary/cstr_one_inlet_one_mal.h5"

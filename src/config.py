@@ -2,7 +2,7 @@
 import yaml
 import mqtt
 
-def get_config(filename="config.yaml"):
+def get_config(filename="config.yml"):
     with open(filename, 'r') as file:
         config = yaml.safe_load(file)
     return config
@@ -33,6 +33,18 @@ def config_to_source(config):
     else:
         print("No source found")
 
+def config_to_mqtt_client_config(config):
+    if "source" in config:
+        source = config["source"]
+        if "mqtt" in source:
+            mqtt_client_config = []
+            
+            all_clients = source["mqtt"]
+            first_client = all_clients[0]
+                
+            return(first_client)
+    else:
+        logger.error("No source found")
 
 def get_topic_map(config):
     """Extract the topic_map section from the config."""

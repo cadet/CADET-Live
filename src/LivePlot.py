@@ -32,12 +32,12 @@ class LivePlot:
         self,
         measurement_provider=None,
         control_provider=None,
-        state_names=None,
+        state_names=[],
         update_interval=0.05,
     ):
         self._meas_prov = measurement_provider
         self._ctrl_prov = control_provider
-        self._state_names = state_names or []
+        self._state_names = state_names
         self._update_interval = update_interval
 
         # State estimate history (filled via update())
