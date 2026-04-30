@@ -223,11 +223,21 @@ class CasadiModel(Model):
         self.t_curr = t_start
 
     def integrate(self,
-                  t_end: float) -> np.ndarray:
-        """Integrate the CasADi model from current time to t_end."""
-        # Handle empty control vector
+                  t_end: float,
+                  u: np.ndarray = None) -> np.ndarray:
+        """Integrate the CasADi model from current time to t_end.
+
+        Parameters
+        ----------
+        u : np.ndarray, optional
+            Control input to apply during this step.  If *None* and the model
+            has control inputs, zeros are used (backward-compatible default).
+        """
+        # Handle empty / provided / default control vector
         if self._nControls == 0:
             u_param = np.array([])
+        elif u is not None:
+            u_param = np.asarray(u, dtype=float).flatten()
         else:
             u_param = np.zeros(self._nControls)
 
@@ -268,6 +278,11 @@ class CasadiModel(Model):
             opts
         )
     
+    @property
+    def integrator(self):
+        """The compiled CasADi integrator function (stateless, safe to share)."""
+        return self._integrator_func
+
     @property
     def state(self) -> np.ndarray:
         return self._state

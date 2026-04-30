@@ -1,4 +1,6 @@
-"""Main control loop: PioReactor -> MqttBridge -> EnKalmanFilter -> PID -> PioReactor.
+"""Main control loop: PioReactor -> MqttBridge -> EnKalmanFilter -> PID/MPC -> PioReactor.
+
+PID controls temperature and stirring; MPC controls dosing rate (F_in).
 
 Usage:
     cd examples
@@ -18,10 +20,15 @@ sys.path.insert(0, _SRC)
 
 import config
 from MqttBridge import MqttBridge
-from Provider import MeasurementProvider
 from modelLibrary.Casadi.monod_cstr import create_monod_cstr
 from stateEsimator.EnKalmanFilter import EnKalmanFilter
 from control.PID import PID
+from control.optimalControl import (
+    TrackingObjective,
+    CasadiOptimalControlProblem,
+    MPCController,
+)
+from Provider import ControlProvider
 from LivePlot import LivePlot
 
 logging.basicConfig(
@@ -30,17 +37,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
-
 DT = 10.0           # Control loop time step [s]
 N_ENSEMBLE = 30     # Ensemble size for Kalman filter
 MAX_ITERATIONS = 30  # 0 = run forever
 
-# PID tuning for each control (only used if configured in config.yaml)
+# MPC tuning for dosing rate (controls substrate S via F_in and F_out)
+MPC_CONFIG = dict(
+    time_horizon=100.0,       # 10 steps × DT
+    u_min=[0.0, 0.0],         # [F_in_min, F_out_min]  [L/h]
+    u_max=[0.2, 0.2],         # [F_in_max, F_out_max]  [L/h]
+    Q=10.0,                   # substrate-tracking weight
+    R=0.1,                    # control-effort weight
+    setpoint=5.0,             # target substrate concentration [g/L]
+    state_index=1,            # S is state index 1
+)
+
+# PID tuning for temperature and stirring (dosing_rate removed — handled by MPC)
 PID_CONFIGS = {
-    "dosing_rate": dict(kp=0.5, ki=0.01, kd=0.0, setpoint=5.0, output_limits=(0, 10)),
     # Temperature: setpoint = target temperature [°C]
     # Input to PID = measured temperature → output = new target temperature
     "temperature_setpoint": dict(kp=1.0, ki=0.05, kd=0.0, setpoint=30.0, output_limits=(20, 40)),
@@ -73,9 +87,7 @@ def build_observation_function(provider_names, state_indices_map):
 
 
 def main():
-    # ------------------------------------------------------------------
     # 1. Load configuration
-    # ------------------------------------------------------------------
     cfg = config.get_config(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml'))
     client_config = config.config_to_source(cfg)
     topic_map = config.get_topic_map(cfg)
@@ -84,12 +96,10 @@ def main():
         logger.error("No topic_map found in config.yaml")
         sys.exit(1)
 
-    # ------------------------------------------------------------------
     # 2. Create MqttBridge
-    # ------------------------------------------------------------------
     bridge = MqttBridge(client_config, topic_map)
     bridge.connect()
-    logger.info("Waiting for MQTT connection...")
+    logger.info("Waiting for MQTT connection")
     for _ in range(30):
         if bridge.connected:
             break
@@ -100,42 +110,40 @@ def main():
         sys.exit(1)
     logger.info("MQTT connected")
 
-    # ------------------------------------------------------------------
     # 3. Create CasadiModel (Monod CSTR)
-    # ------------------------------------------------------------------
+    #    Single model shared by EnKF and MPC.  controllable_Fin=True +
+    #    controllable_Fout=True exposes both F_in (u[0]) and F_out (u[1])
+    #    as CasADi symbolic inputs so the MPC can optimise both and the EnKF
+    #    propagation receives the actually applied control vector each step.
     model = create_monod_cstr(
         X0=np.array([0.1, 10.0, 1.0]),  # [Biomass, Substrate, Volume]
         dt=DT,
+        controllable_Fin=True,
+        controllable_Fout=True,
     )
-    logger.info("CasadiModel created (Monod CSTR, 3 states)")
+    logger.info("CasadiModel created (Monod CSTR, 3 states, 2 controls: F_in + F_out)")
 
-    # ------------------------------------------------------------------
     # 4. Create EnKalmanFilter with measurement providers from bridge
-    # ------------------------------------------------------------------
-    # The bridge has one MeasurementProvider with all variables (as TimeDependentData).
-    # The EnKF needs a provider with only the state-observed variables.
-    # We create a filtered provider that shares the same TimeDependentData references,
-    # so MQTT writes flow through automatically.
-    provider = bridge.measurement_provider
+    # Iterate all measurement names; collect only those with a state_index.
+    # Each per-name provider is passed individually to the EnKF.
     state_indices_map = {}
+    providers_for_enkf = []
 
-    enkf_provider = MeasurementProvider(name="enkf_observed")
-    for var_name in provider.variable_names:
-        var = provider.get_variable(var_name)
+    for name in bridge.measurement_names:
+        prov = bridge.get_measurement_provider(name)
+        var = prov.get_variable(name)
         if var is not None and var.state_index is not None:
-            # Share the same TimeDependentData object (not a copy!)
-            enkf_provider._data[var_name] = var
-            state_indices_map[var_name] = var.state_index
+            providers_for_enkf.append(prov)
+            state_indices_map[name] = var.state_index
 
-    has_observations = len(enkf_provider.variable_names) > 0
-    providers_for_enkf = [enkf_provider] if has_observations else []
+    has_observations = len(providers_for_enkf) > 0
 
     if not has_observations:
         logger.warning("No measurement variables with state_index found. "
                        "EnKF will run open-loop (prediction only).")
 
     obs_func = build_observation_function(
-        enkf_provider.variable_names,
+        list(state_indices_map.keys()),
         state_indices_map,
     ) if has_observations else None
 
@@ -152,17 +160,51 @@ def main():
     logger.info("EnKalmanFilter created with %d providers", len(providers_for_enkf))
 
     # ------------------------------------------------------------------
-    # 5. Create PID controllers (only for configured controls)
+    # 5a. Create PID controllers (temperature + stirring)
     # ------------------------------------------------------------------
     configured_controls = {c["name"] for c in topic_map.get("controls", [])}
     pids = {}
-    
+
     for ctrl_name in configured_controls:
         if ctrl_name in PID_CONFIGS:
             pids[ctrl_name] = PID(**PID_CONFIGS[ctrl_name])
             logger.info("PID controller created for '%s'", ctrl_name)
-        else:
-            logger.warning("No PID config defined for control '%s'", ctrl_name)
+
+    # ------------------------------------------------------------------
+    # 5b. Create MPC controller (dosing rate via F_in)
+    # ------------------------------------------------------------------
+    mpc_ctrl = None
+    if "dosing_rate" in configured_controls:
+        
+        mpc_objective = TrackingObjective(
+            Q=MPC_CONFIG["Q"],
+            R=MPC_CONFIG["R"],
+            setpoint=MPC_CONFIG["setpoint"],
+            state_index=MPC_CONFIG["state_index"],
+        )
+        
+        mpc_ocp = CasadiOptimalControlProblem(
+            model=model,
+            objective=mpc_objective,
+            time_horizon=MPC_CONFIG["time_horizon"],
+            u_min=MPC_CONFIG["u_min"],
+            u_max=MPC_CONFIG["u_max"],
+            ipopt_print_level=0,
+        )
+        
+        mpc_ctrl = MPCController(mpc_ocp)
+        logger.info("MPCController created for 'dosing_rate' (horizon=%.0fs)",
+                    MPC_CONFIG["time_horizon"])
+    else:
+        logger.warning("'dosing_rate' not in config controls — MPC disabled")
+
+    # ControlProvider for the MPC prediction sequence; injected into the
+    # controller so the sequence is published automatically after every update().
+    # bridge.control_provider still holds only the actually applied u[0].
+    mpc_plan_provider = ControlProvider("mpc_plan")
+    if mpc_ctrl is not None:
+        mpc_ctrl = MPCController(mpc_ocp, provider=mpc_plan_provider, variable_name="dosing_rate")
+        logger.info("mpc_plan_provider created for MPC prediction sequence")
 
     # ------------------------------------------------------------------
     # 6. Wait for initial measurements
@@ -170,8 +212,8 @@ def main():
     logger.info("Waiting for initial sensor data (up to 30s)...")
     for _ in range(60):
         has_data = any(
-            len(enkf_provider.get_variable(n) or []) > 0
-            for n in enkf_provider.variable_names
+            bridge.get_latest_measurement(n) is not None
+            for n in state_indices_map
         )
         if has_data:
             break
@@ -193,31 +235,60 @@ def main():
 
     logger.info("=== Starting control loop (dt=%.1fs, %d controls) ===", DT, len(configured_controls))
     iteration = 0
+    # Last applied control vector [F_in, F_out] — passed to the EnKF propagation
+    # so the ensemble prediction uses the same u that was sent to the plant.
+    u_dosing_last: np.ndarray = np.zeros(2)
+    # Track the latest measurement time we have already used for an EnKF correction
+    # + MPC re-solve.  When a newer measurement arrives we call update(); otherwise
+    # we call step() to apply the next value from the pre-computed sequence.
+    t_last_meas_used: float = -np.inf
 
     try:
         while True:
             iteration += 1
             t = enkf.t_current + DT
 
-            # --- Propagate + Update (EnKF) ---
+            # --- Check whether a new MQTT measurement arrived since the last update ---
+            new_measurement = False
             if has_observations:
+                for vn in state_indices_map:
+                    m = bridge.get_latest_measurement(vn)
+                    if m is not None and float(m[0]) > t_last_meas_used:
+                        new_measurement = True
+                        t_last_meas_used = float(m[0])
+                        break
+
+            # --- Propagate + Update (EnKF) ---
+            u_enkf = u_dosing_last if mpc_ctrl is not None else None
+            if new_measurement:
                 state = enkf.update_state_with_interpolation(
-                    t_end=t, interpolation="nearest"
+                    t_end=t, interpolation="nearest", u=u_enkf
                 )
             else:
-                enkf.propagate(t)
+                enkf.propagate(t, u=u_enkf)
                 state = enkf.state.copy()
 
             X_est, S_est, V_est = state[0], state[1], state[2]
 
             # --- Compute and publish control commands ---
             control_outputs = {}
-            
-            # Dosing PID: controls substrate concentration
-            if "dosing_rate" in pids:
-                _, control_outputs["dosing_rate"] = pids["dosing_rate"].update(S_est, DT, t)
+
+            # Dosing MPC: re-solve when a new state estimate is available;
+            # otherwise apply the next step from the pre-computed sequence.
+            if mpc_ctrl is not None:
+                if new_measurement:
+                    _, _ = mpc_ctrl.solve(state, DT, t)
+                    logger.debug("MPC re-solved at t=%.1f (new measurement)", t)
+                else:
+                    _, _ = mpc_ctrl.step(t)
+                    logger.debug("MPC step at t=%.1f (no new measurement)", t)
+                u_vec = mpc_ctrl.current_control          # [F_in, F_out]
+                u_dosing_last = u_vec
+                control_outputs["dosing_rate"]  = float(u_vec[0])
+                control_outputs["outlet_rate"]  = float(u_vec[1])
                 bridge.publish_control("dosing_rate", control_outputs["dosing_rate"], t)
-            
+                bridge.publish_control("outlet_rate", control_outputs["outlet_rate"], t)
+
             # Temperature PID: controls temperature (if available)
             if "temperature_setpoint" in pids:
                 temp_meas = bridge.get_latest_measurement("temperature")

@@ -20,6 +20,8 @@ def create_monod_cstr(
     F_in=0.05,
     F_out=0.05,
     process_noise=None,
+    controllable_Fin=False,
+    controllable_Fout=False,
 ):
     """Create a Monod-kinetics CSTR model for yeast growth.
 
@@ -43,11 +45,20 @@ def create_monod_cstr(
     S_in : float
         Substrate concentration in feed.
     F_in : float
-        Inlet flow rate.
+        Nominal inlet flow rate. Used as a fixed parameter when
+        ``controllable_Fin=False``, ignored when ``controllable_Fin=True``.
     F_out : float
-        Outlet flow rate.
+        Outlet flow rate. Used as a fixed parameter when
+        ``controllable_Fout=False``, ignored when ``controllable_Fout=True``.
     process_noise : np.ndarray, optional
         3x3 process noise covariance. Default: small diagonal.
+    controllable_Fin : bool
+        If True, F_in is exposed as symbolic control input u[0] so an MPC
+        can optimise it. If False (default), F_in is a fixed parameter
+        baked into the ODE (backward-compatible, used by the EnKF model).
+    controllable_Fout : bool
+        If True (and ``controllable_Fin=True``), F_out is exposed as symbolic
+        control input u[1].  Ignored when ``controllable_Fin=False``.
 
     Returns
     -------
@@ -63,21 +74,61 @@ def create_monod_cstr(
     V = ca.SX.sym("V")  # Volume
     states = ca.vertcat(X, S, V)
 
-    # No external control input (PID controls flow rates externally)
-    u = ca.SX.sym("u", 0)
+    if controllable_Fin:
+        if controllable_Fout:
+            # Both F_in (u[0]) and F_out (u[1]) are MPC decision variables
+            u = ca.SX.sym("u", 2)
 
-    def cstr_ode(x, u):
-        X_val, S_val, V_val = x[0], x[1], x[2]
+            def cstr_ode(x, u):
+                X_val, S_val, V_val = x[0], x[1], x[2]
+                F_in_ctrl  = u[0]
+                F_out_ctrl = u[1]
 
-        # Monod growth rate
-        mu = mu_max * S_val / (K_s + S_val)
+                mu = mu_max * S_val / (K_s + S_val)
 
-        # Mass balances
-        dX_dt = mu * X_val - (F_out / V_val) * X_val
-        dS_dt = -(mu / Y_xs) * X_val + (F_in / V_val) * (S_in - S_val)
-        dV_dt = F_in - F_out
+                dX_dt = mu * X_val - (F_out_ctrl / V_val) * X_val
+                dS_dt = -(mu / Y_xs) * X_val + (F_in_ctrl / V_val) * (S_in - S_val)
+                dV_dt = F_in_ctrl - F_out_ctrl
 
-        return ca.vertcat(dX_dt, dS_dt, dV_dt)
+                return ca.vertcat(dX_dt, dS_dt, dV_dt)
+
+        else:
+            # Only F_in is controllable; F_out is fixed from the closure
+            u = ca.SX.sym("u", 1)
+
+            def cstr_ode(x, u):
+                X_val, S_val, V_val = x[0], x[1], x[2]
+                F_in_ctrl = u[0]
+                V_MIN = 0.01
+                V_safe = (V_val + V_MIN + ca.sqrt((V_val - V_MIN)**2 + 1e-10)) / 2
+                S_safe = (S_val + ca.sqrt(S_val**2 + 1e-10)) / 2
+                mu = mu_max * S_safe / (K_s + S_safe)
+
+                dX_dt = mu * X_val - (F_out / V_safe) * X_val
+                dS_dt = -(mu / Y_xs) * X_val + (F_in_ctrl / V_safe) * (S_in - S_val)
+                dV_dt = F_in_ctrl - F_out
+
+                return ca.vertcat(dX_dt, dS_dt, dV_dt)
+
+    else:
+        # No external control input — F_in baked in (default, used by EnKF)
+        u = ca.SX.sym("u", 0)
+
+        def cstr_ode(x, u):
+            X_val, S_val, V_val = x[0], x[1], x[2]
+            V_MIN = 0.01
+            V_safe = (V_val + V_MIN + ca.sqrt((V_val - V_MIN)**2 + 1e-10)) / 2
+            S_safe = (S_val + ca.sqrt(S_val**2 + 1e-10)) / 2
+
+            # Monod growth rate
+            mu = mu_max * S_safe / (K_s + S_safe)
+
+            # Mass balances
+            dX_dt = mu * X_val - (F_out / V_safe) * X_val
+            dS_dt = -(mu / Y_xs) * X_val + (F_in / V_safe) * (S_in - S_val)
+            dV_dt = F_in - F_out
+
+            return ca.vertcat(dX_dt, dS_dt, dV_dt)
 
     if process_noise is None:
         process_noise = np.diag([1e-4, 1e-4, 1e-6])

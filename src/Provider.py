@@ -349,6 +349,37 @@ class ControlProvider(Provider):
         """Add control input."""
         self.add_data(variable_name, time, value)
 
+    def replace_variable(self,
+                         variable_name: str,
+                         times: np.ndarray,
+                         values: np.ndarray,
+                         noise: Optional[np.ndarray] = None) -> None:
+        """Replace all stored data for *variable_name* with a new sequence.
+
+        Existing data is discarded and replaced atomically.  If the variable
+        does not yet exist it is created automatically.
+
+        Parameters
+        ----------
+        variable_name : str
+            Name of the control variable.
+        times : np.ndarray
+            1-D array of time stamps, shape ``(N,)``.
+        values : np.ndarray
+            Array of control values.  Shape ``(N,)`` or ``(N, n_controls)``.
+            Each row corresponds to the matching entry in *times*.
+        noise : np.ndarray, optional
+            Noise covariance to attach to the variable (only applied when
+            the variable is created for the first time).
+        """
+        if variable_name not in self._data:
+            self.add_variable(variable_name, noise=noise)
+        tdd = self._data[variable_name]
+        with tdd._lock:
+            tdd._data = []
+        for t, v in zip(times, np.atleast_2d(values)):
+            tdd.add_data(float(t), v)
+
     @property
     def times(self) -> np.ndarray:
         """All control times."""

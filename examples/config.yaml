@@ -40,4 +40,6 @@ topic_map:
       topic: "pioreactor/pioreactor01/Test/stirring/target_rpm"
     - name: "temperature_setpoint"
       topic: "pioreactor/pioreactor01/Test/temperature_automation/target_temperature"
+    - name: "dosing_rate"
+      topic: "pioreactor/pioreactor01/Test/dosing_automation/flow_rate_ml_per_min"
     

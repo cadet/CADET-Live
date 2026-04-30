@@ -139,17 +139,26 @@ class EnKalmanFilter:
         return np.array(measurements) if measurements else None
     
 
-    def propagate(self, 
-                  t_end: float):
-        
+    def propagate(self,
+                  t_end: float,
+                  u: np.ndarray = None):
+        """Propagate the ensemble one step to *t_end*.
+
+        Parameters
+        ----------
+        u : np.ndarray, optional
+            Control input applied during this interval (e.g. the last value
+            from the MPC/step sequence).  Forwarded to ``model.integrate()``.
+            If *None*, the model default (usually zeros) is used.
+        """
         for i in range(self.N_ens):
             x_prev = self.X_ens[i, :]
-            
+
             self.model.update_state(x_prev, self.t_current)
 
-            # Integrate using model
+            # Integrate using model with the supplied control
             x_next = self.model.integrate(
-                t_end=t_end
+                t_end=t_end, u=u
             )
             
             # Add process noise
@@ -165,7 +174,7 @@ class EnKalmanFilter:
         self.t_current = t_end
         
 
-    def _update(self,
+    def update_state(self,
                measurement: Union[np.ndarray, float]):
 
         y_meas = np.atleast_1d(measurement).flatten()
@@ -209,7 +218,7 @@ class EnKalmanFilter:
              measurement: Union[np.ndarray, float]):
 
         self.propagate(t_end)
-        self._update(measurement)
+        self.update_state(measurement)
         return self.state.copy()
 
     def _update_with_interpolation(self,
@@ -230,13 +239,21 @@ class EnKalmanFilter:
             )
             return
 
-        self._update(y_meas)
+        self.update_state(y_meas)
     
     def update_state_with_interpolation(self,
                             t_end: float,
-                            interpolation: str = 'nearest') -> np.ndarray:
+                            interpolation: str = 'nearest',
+                            u: np.ndarray = None) -> np.ndarray:
+        """Propagate + correct the ensemble.
 
-        self.propagate(t_end)
+        Parameters
+        ----------
+        u : np.ndarray, optional
+            Control input applied during this interval.  Forwarded to
+            ``propagate()``.  If *None*, the model default is used.
+        """
+        self.propagate(t_end, u=u)
         self._update_with_interpolation(t_end, interpolation)
         return self.state.copy()
 

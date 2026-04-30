@@ -1,0 +1,41 @@
+# Konfiguration für die Crabtree-Simulation über MQTT
+# Plant-Publisher und Control-Loop nutzen denselben lokalen Broker (mosquitto).
+#
+# Starten:
+#   Terminal 1:  mosquitto -v
+#   Terminal 2:  mamba run -n CADET-Live python examples/crabtree_plant_publisher.py
+#   Terminal 3:  mamba run -n CADET-Live python examples/crabtree_control_loop.py
+
+source:
+  mqtt:
+    - host: "localhost"
+      port: 1883
+      username: ""
+      password: ""
+      timeout: 60
+
+# Topic-Mapping: MQTT-Topics ↔ Provider-Variablen
+topic_map:
+  measurements:
+    # Biomasse X  (OD-Sensor, State-Index 0)
+    - name: "biomass"
+      topic_suffix: "crabtree/sim/biomass"
+      payload_key: "value"
+      noise: 0.0004          # 0.02² Varianz
+      state_index: 0
+
+    # Glucose G  (Glucosemeter, State-Index 1)
+    - name: "glucose"
+      topic_suffix: "crabtree/sim/glucose"
+      payload_key: "value"
+      noise: 0.25            # 0.5² Varianz
+      state_index: 1
+
+  controls:
+    # Zulaufpumpe  F_in [L/h]
+    - name: "fin"
+      topic: "crabtree/control/fin"
+
+    # Ablaufpumpe  F_out [L/h]
+    - name: "fout"
+      topic: "crabtree/control/fout"
