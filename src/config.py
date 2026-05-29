@@ -33,7 +33,7 @@ def config_to_source(config):
     else:
         print("No source found")
 
-def config_to_mqtt_client_config(config):
+def get_mqtt_client_config(config):
     if "source" in config:
         source = config["source"]
         if "mqtt" in source:
