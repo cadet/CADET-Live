@@ -5,10 +5,9 @@ import time
 
 from CADETProcess.simulator import Cadet
 
-import h5
-
-import mqtt
 import config
+import h5
+import mqtt
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.debug)
@@ -31,7 +30,7 @@ for i in range(0, 3):
     print("Iteration: ", i)
 
 #    print()
-    ist_data = mqtt_client.client.user_data_get() 
+    ist_data = mqtt_client.client.user_data_get()
 #    data = sim_file["input"]["model"]["unit_001"]["INIT_C"]
 #    print(data[0])
 #    current_data = mqtt_client.client.user_data_get()
@@ -40,7 +39,7 @@ for i in range(0, 3):
 #    print(sim_file["input"]["model"]["unit_001"]["INIT_C"][()])
 #    h5.save_h5_file(h5_file_path, sim_file)
 
-     
+
 #    cadet = Cadet()
 #    cadet.check_cadet()
 #    cadet.load_from_h5("./data.h5")
@@ -54,6 +53,3 @@ print("Info: Start loop")
 
 
 mqtt_client.mqtt_stop()
-
-
-
