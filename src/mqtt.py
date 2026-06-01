@@ -17,23 +17,24 @@ from Provider import MeasurementProvider, ControlProvider
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARNING)
 
 
 class Client:
     def __init__(self, config):
-        self.host = config["host"] or ""
+        logger.debug("Init Client with", config)
+        self.host = config["host"] or "127.0.0.1"
         self.username = config["username"] or ""
         self.password = config["password"] or ""
         self.port = config["port"] or 1883
         self.timeout = config["timeout"] or 60
         self.timestamp_format = config["timestamp_format"] or "%Y-%m-%dT%H:%M:%S.%fZ"
+        logger.info("Create Client with info: ", self)
 
 
 class MqttConnection:
     # Setup
     def __init__(self, client_info: Client, mapping):
-    #    print("[MQTT] - Client Info: ", vars(client_info))
+        logger.debug("Init MQTT-Connection")
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.enable_logger()
         self.client.on_connect = self.__on_connect
@@ -42,16 +43,6 @@ class MqttConnection:
         self.client.on_unsubscribe = self.__on_unsubscribe
         self.mapping = mapping
         self.timestamp_format = client_info.timestamp_format
-
-    # Toni
-        # MeasurementProvider — variables are managed as TimeDependentData
-#        self._measurement_provider = MeasurementProvider(name="mqtt_measurements")
-
-        # Routing: topic_suffix -> [(variable_name, payload_key, payload_parser)]
-#        self._measurement_routes: dict[str, list[tuple[str, str | None, str | None]]] = {}
-
-#        self._parse_topic_map(topic_map)
-    # Toni Ende
 
         print("[MQTT] Connect to server")
         self.client.username_pw_set(client_info.username, client_info.password)
@@ -95,21 +86,31 @@ class MqttConnection:
     #    userdata.append(message.payload)
     #    userdata = []
         # Get LED intensity
-#        print(message.topic)
+        print(message.topic)
         for measurement_mapping in self.mapping:
             if (message.topic.endswith(measurement_mapping.get("topic_suffix"))):
                 payload = eval(message.payload.decode())
-                value = payload.get(measurement_mapping.get("type")).get(measurement_mapping.get("channel")).get(measurement_mapping.get("name"))
-
+                
                 timestamp = datetime.now()
-                if (payload.get(measurement_mapping.get("type")).get(measurement_mapping.get("channel")).get("timestamp")):
+                value = ""
+
+                print(measurement_mapping.get("name"), payload)
+                if(measurement_mapping.get("type") == "nested_with_channel"):
+                    value = payload.get(measurement_mapping.get("label")).get(measurement_mapping.get("channel")).get(measurement_mapping.get("name"))
                     timestamp = datetime.strptime(
-                        payload.get(measurement_mapping.get("type")).get(measurement_mapping.get("channel")).get("timestamp"),
+                        payload.get(measurement_mapping.get("label")).get(measurement_mapping.get("channel")).get("timestamp"),
                         self.timestamp_format)
-                if ("OD" in userdata.keys()):
-                    userdata["OD"].append([timestamp, value])
+                elif(measurement_mapping.get("type") == "tuple"):
+                    value = payload.get(measurement_mapping.get("label"))
+                    timestamp = datetime.strptime(
+                        payload.get("timestamp"),
+                        self.timestamp_format)
+
+ 
+                if (measurement_mapping.get("name") in userdata.keys()):
+                    userdata[measurement_mapping.get("name")].append([timestamp, value])
                 else:
-                    userdata["OD"] = [[timestamp, value]]
+                    userdata[measurement_mapping.get("name")] = [[timestamp, value]]
 
 #                print("Timestamp:", timestamp, "  --  Measurement:", value)
 

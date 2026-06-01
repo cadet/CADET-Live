@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
+import logging
 import mqtt
 import yaml
 
+logger = logging.getLogger(__name__)
 
 def get_config(filename="config.yml"):
+    logger.debug("Try to read file ", filename)
     with open(filename, 'r') as file:
         config = yaml.safe_load(file)
+        logger.debug("Read config file successfully")
     return config
 
 

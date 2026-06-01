@@ -10,7 +10,7 @@ import h5
 import mqtt
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.debug)
+logging.basicConfig(level=logging.ERROR)
 
 # Setup MQTT client
 raw_config = config.get_config()
@@ -25,12 +25,13 @@ mqtt_client = mqtt.MqttConnection(client, data_mapping)
 
 # Setup h5
 sim_file = h5.load_h5_file(raw_config["simulation"]["filepath"])
-
-for i in range(0, 3):
+logger.info("Start Loop")
+for i in range(0, 30):
     print("Iteration: ", i)
 
 #    print()
     ist_data = mqtt_client.client.user_data_get()
+#    print(ist_data or [])
 #    data = sim_file["input"]["model"]["unit_001"]["INIT_C"]
 #    print(data[0])
 #    current_data = mqtt_client.client.user_data_get()
@@ -47,9 +48,6 @@ for i in range(0, 3):
 #    print(vars(cadet))
 #    result = cadet.run_h5(h5_file_path)
 #    print(result.root.output.solution.unit_001.SOLUTION_BULK)
-    time.sleep(5)
-
-print("Info: Start loop")
-
+    time.sleep(10)
 
 mqtt_client.mqtt_stop()
