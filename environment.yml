@@ -6,3 +6,9 @@ dependencies:
   - casadi
   - cadet
   - pip
+  - pyyaml
+  - paho-mqtt
+  - spyder-kernels=3.1
+  - h5py
+  - pip:
+      - cadet-process
