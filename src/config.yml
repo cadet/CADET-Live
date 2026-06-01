@@ -4,23 +4,29 @@ source:
       port: 1883
       username: "pioreactor"
       password: "raspberry"
-      timeout: 11
+      timeout: 15
       timestamp_format: "%Y-%m-%dT%H:%M:%S.%fZ"
-    - hostname: "pioreactor02"
-      port: 13
-      username: "pioreactor"
-      password: "raspebrry"
-      timeout: 60
+
 simulation:
   filepath: "./modelLibrary/cstr_one_inlet_one_mal.h5"
   
 topic_map:
-# OD (Optische Dichte) - extract from nested JSON structure
-# Payload: {"timestamp":"...","ods":{"2":{"od":0.0002...}}}
     - name: "od"
-      type: "ods"
+      type: "nested_with_channel"
+      label: "ods"
       topic_suffix: "/od_reading/ods"
       channel: "2"
-      payload_parser: "od_channel_2"
       noise: 0.001
-      state_index: 1  # Maps to S (substrate) in CSTR
+      state_index: 1
+    - name: "rpm"
+      type: "tuple"
+      topic_suffix: "/stirring/measured_rpm"
+      label: "measured_rpm"
+    - name: "temp"
+      topic_suffix: "temperature_automation/temperature"
+      type: "tuple"
+      label: "temperature"
+    - name: "od2"
+      topic_suffix: "od_reading/od2"
+      type: "tuple"
+      label: "od"
