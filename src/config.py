@@ -53,6 +53,9 @@ def get_mqtt_client_config(config):
     else:
         logger.error("No source found")
 
+def get_control_api(config) -> dict:
+    api_config = config.get("control").get("api")
+    return api_config
 
 def get_topic_map(config):
     """Extract the topic_map section from the config."""

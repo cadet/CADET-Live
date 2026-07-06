@@ -11,11 +11,6 @@ from datetime import datetime
 
 import paho.mqtt.client as mqtt
 
-# Toni
-from Provider import MeasurementProvider, ControlProvider
-# Toni Ende
-
-
 logger = logging.getLogger(__name__)
 
 

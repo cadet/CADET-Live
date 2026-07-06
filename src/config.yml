@@ -8,7 +8,7 @@ source:
       timestamp_format: "%Y-%m-%dT%H:%M:%S.%fZ"
 
 simulation:
-  filepath: "./modelLibrary/cstr_one_inlet_one_mal.h5"
+  filepath: "../examples/modelLibrary/cstr_one_inlet_one_mal.h5"
   
 topic_map:
     - name: "od"
@@ -31,5 +31,14 @@ topic_map:
       type: "tuple"
       label: "od"
 
-simulation:
-  filepath: "./modelLibrary/cstr_one_inlet_one_mal.h5"
+control:
+  api:
+    url: "http://pioreactor01.local"
+    mapping:
+      - name: "stirring"
+        path: "/unit_api/jobs/run/job_name/stirring"
+        label: "target_rpm"
+        value: 600
+      - name: "heating"
+        path: "/unit_api/jobs/run/job_name/heating"
+        label: "temp"
