@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from datetime import datetime, timedelta
 import copy
+from datetime import datetime
 
 
 def time_to_relative(data: dict, reference_time: datetime) -> dict:
@@ -10,6 +10,7 @@ def time_to_relative(data: dict, reference_time: datetime) -> dict:
         for item in value:
             item[0] -= reference_time
     return new_data
+
 
 def time_to_absolute(data: dict, reference_time: datetime) -> dict:
     new_data = copy.deepcopy(data)

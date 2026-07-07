@@ -10,7 +10,7 @@ from CADETProcess.simulator import Cadet
 import config
 import h5
 import mqtt
-#import conversion
+import conversion
 
 
 start_time = datetime.now()
@@ -31,7 +31,7 @@ mqtt_client = mqtt.MqttConnection(client, data_mapping)
 
 
 # Setup h5
-sim_file = h5.load_h5_file(raw_config["simulation"]["filepath"])
+#sim_file = h5.load_h5_file(raw_config["simulation"]["filepath"])
 logger.info("Start Loop")
 for i in range(0, 1):
     print("Iteration: ", i)

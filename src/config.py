@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 import logging
+
 import mqtt
 import yaml
 
 logger = logging.getLogger(__name__)
 
-def get_config(filename="config.yml"):
+
+def get_config(filename: str = "config.yml") -> dict:
     logger.debug("Try to read file ", filename)
     with open(filename, 'r') as file:
         config = yaml.safe_load(file)
@@ -13,7 +15,7 @@ def get_config(filename="config.yml"):
     return config
 
 
-def config_to_source(config):
+def config_to_source(config: dict) -> mqtt.Client:
     if "source" in config:
         source = config["source"]
         if "mqtt" in source:
@@ -32,6 +34,8 @@ def config_to_source(config):
                 mqtt_client.port = first_client["port"]
             if "timeout" in first_client:
                 mqtt_client.timeout = first_client["timeout"]
+            if "topic" in first_client:
+                mqtt_client.topic = first_client["topic"]
 
             # print("Client: ", vars(mqtt_client))
 
@@ -40,12 +44,10 @@ def config_to_source(config):
         print("No source found")
 
 
-def get_mqtt_client_config(config):
+def get_mqtt_client_config(config: dict) -> dict:
     if "source" in config:
         source = config["source"]
         if "mqtt" in source:
-            mqtt_client_config = []
-
             all_clients = source["mqtt"]
             first_client = all_clients[0]
 
@@ -53,10 +55,12 @@ def get_mqtt_client_config(config):
     else:
         logger.error("No source found")
 
-def get_control_api(config) -> dict:
+
+def get_control_api(config: dict) -> dict:
     api_config = config.get("control").get("api")
     return api_config
 
-def get_topic_map(config):
+
+def get_topic_map(config: dict) -> dict:
     """Extract the topic_map section from the config."""
     return config.get("topic_map", None)
