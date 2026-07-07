@@ -25,6 +25,7 @@ class Client:
         self.port = config["port"] or 1883
         self.timeout = config["timeout"] or 60
         self.timestamp_format = config["timestamp_format"] or "%Y-%m-%dT%H:%M:%S.%fZ"
+        self.topic = config["topic"] or "/#"
         logger.info("Create Client with info: ", self)
 
 
@@ -63,7 +64,7 @@ class MqttConnection:
         print(f"Connected with result code {reason_code}")
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
-        client.subscribe("pioreactor/pioreactor01/#")
+        client.subscribe(self.topic)
 
     def __on_subscribe(self, client: mqtt.Client, userdata: any, mid: int, reason_code_list: list[mqtt_reasoncodes.ReasonCode], properties: mqtt_properties.Properties) -> None:
         # Since we subscribed only for a single channel, reason_code_list contains
@@ -106,7 +107,7 @@ class MqttConnection:
 
         # We only want to process 10 messages
         if len(userdata) >= 50:
-            client.unsubscribe("pioreactor/pioreactor01/#")
+            client.unsubscribe(self.topic)
 
     # Disconnect
     def __on_unsubscribe(self, client: mqtt.Client, userdata: any, mid: int, reason_code_list: list[mqtt_reasoncodes.ReasonCode], properties: mqtt_properties.Properties) -> None:

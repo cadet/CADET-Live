@@ -1,11 +1,12 @@
 source:
   mqtt:
-    - host: "pioreactor01.local"
+    - host: "pioreactor.local"
       port: 1883
       username: "pioreactor"
       password: "raspberry"
       timeout: 15
       timestamp_format: "%Y-%m-%dT%H:%M:%S.%fZ"
+      topic: "pioreactor/pioreactor02/#"
 
 simulation:
   filepath: "../examples/modelLibrary/cstr_one_inlet_one_mal.h5"
