@@ -3,11 +3,18 @@
 import logging
 import time
 
+from datetime import datetime
+
 from CADETProcess.simulator import Cadet
 
 import config
 import h5
 import mqtt
+#import conversion
+
+
+start_time = datetime.now()
+print(type(start_time))
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.ERROR)
@@ -26,11 +33,12 @@ mqtt_client = mqtt.MqttConnection(client, data_mapping)
 # Setup h5
 sim_file = h5.load_h5_file(raw_config["simulation"]["filepath"])
 logger.info("Start Loop")
-for i in range(0, 30):
+for i in range(0, 1):
     print("Iteration: ", i)
 
 #    print()
     ist_data = mqtt_client.client.user_data_get()
+    ist_data_relativ = conversion.time_to_relative(ist_data, start_time)
 #    print(ist_data or [])
 #    data = sim_file["input"]["model"]["unit_001"]["INIT_C"]
 #    print(data[0])
