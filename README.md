@@ -24,4 +24,4 @@ This section in the README.md describes how users can begin working with the con
 
 ---
 ### Overview
-![Concept](docu/image/README/CADET-LivePioreactor.drawio.png)
+![Concept](documentation/image/README/CADET-LivePioreactor.drawio.png)

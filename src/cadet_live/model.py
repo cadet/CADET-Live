@@ -7,10 +7,19 @@ from cadet import Cadet
 # TODO: change from indicies to cadet variable and state dict
 # TODO: add optinal indices to update state
 class Model(ABC):
+    """Abstract base class for dynamical system models.
+    
+    All model implementations must provide:
+    - integrate(x0, u, t_start, t_end): Integrate state from t_start to t_end
+    - nStates: Number of state variables
+    - nControls: Number of control inputs
+    """
+
     @abstractmethod
     def integrate(self,
                   t_end: float) -> np.ndarray:
-        """Integrate the model from t_start to t_end."""
+        """Integrate the model from t_start to t_end.
+        """
         pass
 
     def update_state(self, x0: np.ndarray, t_start: float):
@@ -30,6 +39,7 @@ class Model(ABC):
 
 
 class CadetModel(Model):
+    """CADET-based dynamical system model."""
 
     def __init__(self, 
                  cadet_path: str, #TODO be flexible also allow the direct model object 
@@ -39,7 +49,21 @@ class CadetModel(Model):
                  n_controls: int = 0,
                  process_noise: np.ndarray = None,
                  state_indices: list = None):
-        
+        """
+        Parameters
+        ----------
+        cadet_path : str
+            Path to CADET installation.
+        model_path : str
+            Path to the CADET model file (.h5).
+        n_states : int
+            Number of state variables to track.
+        n_controls : int
+            Number of control inputs.
+        state_indices : list, optional
+            Indices of the states to extract from CADET result.
+            If None, uses range(n_states).
+        """
         self._nStates = n_states
         self._nControls = n_controls
         self._state_indices = state_indices if state_indices is not None else list(range(n_states))
@@ -57,6 +81,7 @@ class CadetModel(Model):
         self.t_curr = 0.0
     
     def update_state(self, x0: np.ndarray, t_start: float):
+        """Update the state in the CADET model."""
         try:
             X0_full = np.zeros(7)
             X0_full[self._state_indices] = x0
@@ -114,6 +139,11 @@ class CadetModel(Model):
 
 
 class CasadiModel(Model):
+    """
+    A generic dynamical system model using CasADi's IDAS/SUNDIALS solver
+    for ODE integration.
+    """
+
     def __init__(self,
                  states: ca.SX,
                  controls: ca.SX,
@@ -123,7 +153,24 @@ class CasadiModel(Model):
                  dt: float = 0.1,
                  T: float = 1.0,
                  integrator_type: str = "cvodes"):
-        
+        """
+        Parameters
+        ----------
+        states : ca.SX
+            Symbolic state vector.
+        controls : ca.SX
+            Symbolic input vector (can be empty: ca.SX.sym('u', 0)).
+        ode : callable
+            Function f(x, u) → dx/dt.
+        init_state : np.ndarray
+            Initial state vector.
+        dt : float
+            Default sampling time for integration.
+        T : float
+            Total simulation horizon.
+        integrator_type : str
+            One of ["idas", "cvodes"].
+        """
         self._states_sym = states
         self._controls_sym = controls
         self._ode = ode
@@ -147,7 +194,7 @@ class CasadiModel(Model):
         self._integrator_func = self._create_integrator(integrator_type)
 
     def _create_integrator(self, integrator_type: str):
-
+        """Create a CasADi integrator for the ODE system with default time step."""
         f = self._ode(self._states_sym, self._controls_sym)
 
         dae = {
@@ -171,10 +218,13 @@ class CasadiModel(Model):
         )
 
     def update_state(self, x0: np.ndarray, t_start: float):
+        """Update the model's internal state before integration."""
         self._state = np.array(x0, dtype=float)
         self.t_curr = t_start
 
-    def integrate(self, t_end: float) -> np.ndarray:
+    def integrate(self,
+                  t_end: float) -> np.ndarray:
+        """Integrate the CasADi model from current time to t_end."""
         # Handle empty control vector
         if self._nControls == 0:
             u_param = np.array([])
@@ -195,6 +245,7 @@ class CasadiModel(Model):
         return x_next
     
     def _create_integrator_with_tf(self, tf: float):
+        """Create integrator with specific final time (for variable step sizes)."""
         f = self._ode(self._states_sym, self._controls_sym)
         
         dae = {
