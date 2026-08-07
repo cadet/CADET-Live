@@ -7,20 +7,20 @@ CasadiModel-Klasse aus control/Model.py verwendet werden können.
 import casadi as ca
 import numpy as np
 
-from Model import CasadiModel
+from cadet_live import CasadiModel
 
 
 def create_monod_cstr(
-    X0=None,
-    dt=0.1,
-    mu_max=0.4,
-    K_s=0.1,
-    Y_xs=0.5,
-    S_in=10.0,
-    F_in=0.05,
-    F_out=0.05,
-    process_noise=None,
-):
+    X0: np.ndarray | list[float] | None = None,
+    dt: float = 0.1,
+    mu_max: float = 0.4,
+    K_s: float = 0.1,
+    Y_xs: float = 0.5,
+    S_in: float = 10.0,
+    F_in: float = 0.05,
+    F_out: float = 0.05,
+    process_noise: np.ndarray | None = None,
+) -> CasadiModel:
     """Create a Monod-kinetics CSTR model for yeast growth.
 
     States:
@@ -66,7 +66,7 @@ def create_monod_cstr(
     # No external control input (PID controls flow rates externally)
     u = ca.SX.sym("u", 0)
 
-    def cstr_ode(x, u):
+    def cstr_ode(x: ca.SX, u: ca.SX) -> ca.SX:
         X_val, S_val, V_val = x[0], x[1], x[2]
 
         # Monod growth rate
