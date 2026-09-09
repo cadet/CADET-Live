@@ -26,12 +26,13 @@ class Client:
         self.timeout = config["timeout"] or 60
         self.timestamp_format = config["timestamp_format"] or "%Y-%m-%dT%H:%M:%S.%fZ"
         self.topic = config["topic"] or "/#"
+        self.mapping = config.get("input_mapping")
         logger.info("Create Client with info: ", self)
 
 
-class MqttConnection:
+class MqttConnection: # TODO: Sollte mit Class Client zusammen geleget werden
     # Setup
-    def __init__(self, client_info: Client, mapping: list) -> None:
+    def __init__(self, client_info: Client) -> None:
         logger.debug("Init MQTT-Connection")
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.enable_logger()
@@ -40,9 +41,9 @@ class MqttConnection:
         self.client.on_subscribe = self.__on_subscribe
         self.client.on_unsubscribe = self.__on_unsubscribe
         self.topic = client_info.topic
-        self.mapping = mapping
+        self.mapping = client_info.mapping or mapping
         self.timestamp_format = client_info.timestamp_format
-
+        
         print("[MQTT] Connect to server")
         self.client.username_pw_set(client_info.username, client_info.password)
         self.client.user_data_set({})

@@ -48,13 +48,35 @@ def get_mqtt_client_config(config: dict) -> dict:
     if "source" in config:
         source = config["source"]
         if "mqtt" in source:
-            all_clients = source["mqtt"]
-            first_client = all_clients[0]
+            if "devices" in source.get("mqtt"):
+                all_clients = source["mqtt"]["devices"]
+                first_client = all_clients[0]
 
             return (first_client)
     else:
         logger.error("No source found")
 
+def create_mqtt_client(config: dict) -> mqtt.Client:
+    client_config = []
+    if "source" in config:
+        source = config["source"]
+        if "mqtt" in source:
+            if "devices" in source.get("mqtt"):
+                all_clients = source["mqtt"]["devices"]
+                client_config = all_clients[0]
+
+
+    # Find higher-level input_mapping if not set per device
+    if not client_config.get("input_mapping"):
+        # Try Type-level
+        if config.get("source").get("mqtt").get("input_mapping"):
+            client_config["input_mapping"] = config.get("source").get("mqtt").get("input_mapping")
+        # Try global level
+        elif config.get("source").get("input_mapping"):
+            client_config["input_mapping"] = config.get("source").get("input_mapping")
+
+    client = mqtt.Client(client_config)
+    return client
 
 def get_control_api(config: dict) -> dict:
     api_config = config.get("control").get("api")
@@ -63,4 +85,4 @@ def get_control_api(config: dict) -> dict:
 
 def get_topic_map(config: dict) -> dict:
     """Extract the topic_map section from the config."""
-    return config.get("topic_map", None)
+    return config.get("input_mapping", None)
