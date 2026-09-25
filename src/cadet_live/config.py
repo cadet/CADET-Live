@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 
-import mqtt
+from . import mqtt 
 import yaml
 
 logger = logging.getLogger(__name__)
