@@ -105,10 +105,6 @@ class PID:
         # Apply output limits
         clamped_output = self._clamp_output(output)
         
-        # Anti-windup: back-calculate integral if output is saturated
-        if clamped_output != output and self.ki != 0:
-            self.integral -= (output - clamped_output) / self.ki
-
         self.previous_error = error
 
         return (time_val, clamped_output)
@@ -123,52 +119,3 @@ class PID:
         self.integral = 0.0
         self.previous_error = 0.0
 
-
-if __name__ == "__main__":
-    
-    # Initialize PID with output limits
-    pid = PID(kp=2.0, ki=0.01, kd=0.01, setpoint=10.0, output_limits=(-100, 100))
-    measurement = 0.0
-    dt = 0.1
-
-    # Initialize data structures
-    measurement_provider = MeasurementProvider("PID_Measurements")
-    control_provider = ControlProvider("PID_Test")
-    
-    for i in range(100):
-        t = i * dt
-        time_val, control = pid.update(measurement, dt, t)
-        measurement += control * dt  # Simulate system response
-        print(f"Time: {t:.2f}, Measurement: {measurement:.2f}, Control: {control:.2f}")
-
-        measurement_provider.addMeasurement("PID_Measurements", t, np.array(measurement))
-        control_provider.addControl("PID_Test", t, np.array(control))
-        a = 1
-
-    measurement_times = measurement_provider.times
-    measurement_values = measurement_provider.measurements
-    
-    control_times = control_provider.times
-    control_values = control_provider.controls
-
-    import matplotlib.pyplot as plt
-    plt.figure(figsize=(12, 6))
-    
-    plt.subplot(2, 1, 1)
-    plt.plot(measurement_times, measurement_values, label='Measurement')
-    plt.axhline(y=pid.current_setpoint(), color='r', linestyle='--', label='Setpoint')
-    plt.title('PID Controller Response')
-    plt.xlabel('Time [s]')
-    plt.ylabel('Measurement')
-    plt.legend()
-    plt.grid(True)
-    
-    plt.subplot(2, 1, 2)
-    plt.plot(control_times, control_values, label='Control Output', color='g')
-    plt.xlabel('Time [s]')
-    plt.ylabel('Control Output')
-    plt.legend()
-    plt.grid(True)
-    
-    plt.tight_layout()
-    plt.show()

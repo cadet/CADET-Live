@@ -1,0 +1,16 @@
+source:
+  mqtt:
+    devices:
+      - host: "localhost"
+        port: 1883
+        username: null
+        password: null
+        timeout: 60
+        timestamp_format: "%Y-%m-%dT%H:%M:%S.%fZ"
+        topic: "virtual_pioreactor"
+
+    input_mapping:
+      - name: "od_measure"
+        type: "tupel"
+        topic_suffix: "od_reading/"
+        label: "od"
