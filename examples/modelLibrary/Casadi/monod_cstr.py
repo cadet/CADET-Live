@@ -1,25 +1,18 @@
-"""Bioprozess-Modelle für CasADi-basierte Simulation.
-
-Definiert ODE-Modelle (z.B. Monod-Kinetik CSTR), die mit der
-CasadiModel-Klasse aus control/Model.py verwendet werden können.
-"""
+"""Monod-kinetics CSTR example using the current CasADi model API."""
 
 import casadi as ca
 import numpy as np
-
 from cadet_live import CasadiModel
 
 
 def create_monod_cstr(
     X0: np.ndarray | list[float] | None = None,
-    dt: float = 0.1,
     mu_max: float = 0.4,
     K_s: float = 0.1,
     Y_xs: float = 0.5,
     S_in: float = 10.0,
     F_in: float = 0.05,
     F_out: float = 0.05,
-    process_noise: np.ndarray | None = None,
 ) -> CasadiModel:
     """Create a Monod-kinetics CSTR model for yeast growth.
 
@@ -32,8 +25,6 @@ def create_monod_cstr(
     ----------
     X0 : array-like, optional
         Initial state [X, S, V]. Default: [0.1, 10.0, 1.0]
-    dt : float
-        Integration time step [s or h, depending on parameter units].
     mu_max : float
         Maximum specific growth rate.
     K_s : float
@@ -46,8 +37,6 @@ def create_monod_cstr(
         Inlet flow rate.
     F_out : float
         Outlet flow rate.
-    process_noise : np.ndarray, optional
-        3x3 process noise covariance. Default: small diagonal.
 
     Returns
     -------
@@ -63,10 +52,8 @@ def create_monod_cstr(
     V = ca.SX.sym("V")  # Volume
     states = ca.vertcat(X, S, V)
 
-    # No external control input (PID controls flow rates externally)
-    u = ca.SX.sym("u", 0)
-
-    def cstr_ode(x: ca.SX, u: ca.SX) -> ca.SX:
+    def cstr_ode(x: ca.SX) -> ca.SX:
+        """Return the biomass, substrate, and volume derivatives."""
         X_val, S_val, V_val = x[0], x[1], x[2]
 
         # Monod growth rate
@@ -79,16 +66,7 @@ def create_monod_cstr(
 
         return ca.vertcat(dX_dt, dS_dt, dV_dt)
 
-    if process_noise is None:
-        process_noise = np.diag([1e-4, 1e-4, 1e-6])
-
-    model = CasadiModel(
-        states=states,
-        controls=u,
-        ode=cstr_ode,
-        init_state=X0,
-        process_noise=process_noise,
-        dt=dt,
-    )
+    model = CasadiModel(states=states, ode=cstr_ode)
+    model.set_state(np.asarray(X0, dtype=float))
 
     return model
