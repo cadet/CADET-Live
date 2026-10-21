@@ -1,0 +1,22 @@
+source:
+  mqtt:
+    devices:
+      - host: "localhost"
+        port: 1883
+        username: null
+        password: null
+        timeout: 60
+        timestamp_format: "%Y-%m-%dT%H:%M:%S.%fZ"
+        topic: "virtual_pioreactor/state"
+
+    input_mapping:
+      - name: "od_measure"
+        type: "tuple"
+        topic_suffix: "/state"
+        label: "od"
+
+control:
+  api:
+    url: "http://127.0.0.1:8000"
+    path: "/control"
+
