@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import logging
 import time
@@ -11,6 +14,7 @@ import config
 import h5
 import mqtt
 import conversion
+import prometheus
 
 
 start_time = datetime.now()
@@ -21,9 +25,10 @@ logging.basicConfig(level=logging.ERROR)
 
 # Setup MQTT client
 raw_config = config.get_config()
-client = config.create_mqtt_client(raw_config)
-mqtt_client = mqtt.MqttConnection(client)
+client = config.create_prometheus_client(raw_config)
+#mqtt_client = mqtt.MqttConnection(client)
 
+client.get_data()
 
 # Setup h5
 #sim_file = h5.load_h5_file(raw_config["simulation"]["filepath"])

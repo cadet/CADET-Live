@@ -31,8 +31,8 @@ def control(type: str, config: dict, target_value: int = None) -> None:
             post(config.get("url"), item.get("path"), {"options": {item.get("label"): value}})
 
 
-def control_sequence(sequences: dict, raw_config: dict) -> None:
-    api_config = config.get_control_api(raw_config)
+def target_control_sequence(sequences: dict, raw_config: dict) -> None:
+    api_config = config.get_target_api(raw_config)
 
     scheduler.remove_all_jobs()
 
@@ -46,7 +46,7 @@ def control_sequence(sequences: dict, raw_config: dict) -> None:
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-api_config = config.get_control_api(raw_config)
+api_config = config.get_target_api(raw_config)
 
 # control("stirring", api_config, 0)
 
@@ -54,6 +54,6 @@ api_config = config.get_control_api(raw_config)
 sequence = {'stirring': [[datetime.now() + timedelta(seconds=10), 400], [datetime.now(), 700], [datetime.now() + timedelta(seconds=20), 400]]}
 # sequence = {'stirring': [[datetime.now() + timedelta(seconds=10), 400]]}
 print(datetime.now())
-control_sequence(sequence, raw_config)
+target_control_sequence(sequence, raw_config)
 
 time.sleep(30)

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 import logging
 
-from . import mqtt 
+from cadet_live import mqtt
+from cadet_live import prometheus
 import yaml
 
 logger = logging.getLogger(__name__)
 
 
-def get_config(filename: str = "config.yml") -> dict:
+def get_config(filename: str = "../../examples/config.yml") -> dict:
     logger.debug("Try to read file ", filename)
     with open(filename, 'r') as file:
         config = yaml.safe_load(file)
@@ -40,6 +41,17 @@ def config_to_source(config: dict) -> mqtt.Client:
             # print("Client: ", vars(mqtt_client))
 
             return (mqtt_client)
+        if "prometheus" in source:
+            prometheus_client = prometheus.Client()
+
+            all_clients = source["prometheus_client"]
+            first_client = all_clients[0]
+            # print("First Client: ", first_client)
+            if "host" in first_client:
+                prometheus_client.host = first_client["host"]
+            if "port" in first_client:
+                prometheus_client.port = first_client["port"]
+            
     else:
         print("No source found")
 
@@ -78,8 +90,27 @@ def create_mqtt_client(config: dict) -> mqtt.Client:
     client = mqtt.Client(client_config)
     return client
 
-def get_control_api(config: dict) -> dict:
-    api_config = config.get("control").get("api")
+def create_prometheus_client(config: dict) -> prometheus.Client:
+    client_config = []
+    if "source" in config:
+        source = config["source"]
+        if "prometheus" in source:
+            if "devices" in source.get("prometheus"):
+                all_clients = source["prometheus"]["devices"]
+                client_config = all_clients[0]
+    # Find higher-level input_mapping if not set per device
+    if not client_config.get("input_mapping"):
+        # Try Type-level
+        if config.get("source").get("prometheus").get("input_mapping"):
+            client_config["input_mapping"] = config.get("source").get("prometheus").get("input_mapping")
+        # Try global level
+        elif config.get("source").get("input_mapping"):
+            client_config["input_mapping"] = config.get("source").get("input_mapping")
+    client = prometheus.Client(client_config)
+    return client
+
+def get_target_api(config: dict) -> dict:
+    api_config = config.get("target").get("api")
     return api_config
 
 

@@ -13,4 +13,5 @@ dependencies:
   - h5py
   - apscheduler
   - pip:
+      - prometheus-api-client
       - cadet-process
